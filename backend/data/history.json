@@ -1,0 +1,734 @@
+[
+  {
+    "command": "Open Chrome",
+    "intent": {
+      "action": "open_app",
+      "target": "Chrome",
+      "parameters": {},
+      "message": "",
+      "confidence": 0.75
+    },
+    "result": {
+      "success": true,
+      "message": "\u2705 Opened Google Chrome",
+      "steps": [
+        "Resolved app: Google Chrome",
+        "Sent activate signal via AppleScript",
+        "Google Chrome is now open"
+      ]
+    },
+    "timestamp": "2026-05-23T18:04:04.426696",
+    "success": true
+  },
+  {
+    "command": "Show system automation options",
+    "intent": {
+      "action": "unknown",
+      "target": "Show system automation options",
+      "parameters": {},
+      "message": "",
+      "confidence": 0.3
+    },
+    "result": {
+      "success": false,
+      "message": "Unknown action: unknown. Try rephrasing your command."
+    },
+    "timestamp": "2026-05-23T18:04:00.199799",
+    "success": false
+  },
+  {
+    "command": "Show system automation options",
+    "intent": {
+      "action": "unknown",
+      "target": "Show system automation options",
+      "parameters": {},
+      "message": "",
+      "confidence": 0.3
+    },
+    "result": {
+      "success": false,
+      "message": "Unknown action: unknown. Try rephrasing your command."
+    },
+    "timestamp": "2026-05-23T18:03:55.932010",
+    "success": false
+  },
+  {
+    "command": "Open WhatsApp and send a message",
+    "intent": {
+      "action": "whatsapp_send",
+      "target": "unknown",
+      "parameters": {},
+      "message": "a message",
+      "confidence": 0.7
+    },
+    "result": {
+      "success": false,
+      "message": "WhatsApp error: Target page, context or browser has been closed. Make sure you're logged into WhatsApp Web.",
+      "steps": []
+    },
+    "timestamp": "2026-05-23T18:03:44.139094",
+    "success": false
+  },
+  {
+    "command": "Start coding mode",
+    "intent": {
+      "action": "workflow",
+      "target": "coding_mode",
+      "parameters": {},
+      "message": "",
+      "confidence": 0.8
+    },
+    "result": {
+      "success": true,
+      "message": "\u2705 Workflow 'coding_mode' completed \u2014 4 steps",
+      "steps": [
+        "\u2705 VS Code",
+        "\u2705 https://leetcode.com",
+        "\u2705 Spotify",
+        "\u2705 system"
+      ]
+    },
+    "timestamp": "2026-05-23T18:03:28.049310",
+    "success": true
+  },
+  {
+    "command": "Start morning mode",
+    "intent": {
+      "action": "unknown",
+      "target": "Start morning mode",
+      "parameters": {},
+      "message": "",
+      "confidence": 0.3
+    },
+    "result": {
+      "success": false,
+      "message": "Unknown action: unknown. Try rephrasing your command."
+    },
+    "timestamp": "2026-05-23T18:03:18.485721",
+    "success": false
+  },
+  {
+    "command": "Start work mode",
+    "intent": {
+      "action": "unknown",
+      "target": "Start work mode",
+      "parameters": {},
+      "message": "",
+      "confidence": 0.3
+    },
+    "result": {
+      "success": false,
+      "message": "Unknown action: unknown. Try rephrasing your command."
+    },
+    "timestamp": "2026-05-23T18:00:46.423645",
+    "success": false
+  },
+  {
+    "command": "Start work mode",
+    "intent": {
+      "action": "unknown",
+      "target": "Start work mode",
+      "parameters": {},
+      "message": "",
+      "confidence": 0.3
+    },
+    "result": {
+      "success": false,
+      "message": "Unknown action: unknown. Try rephrasing your command."
+    },
+    "timestamp": "2026-05-23T17:58:38.684198",
+    "success": false
+  },
+  {
+    "command": "Start DSA practice mode",
+    "intent": {
+      "action": "workflow",
+      "target": "coding_mode",
+      "parameters": {},
+      "message": "",
+      "confidence": 0.8
+    },
+    "result": {
+      "success": true,
+      "message": "\u2705 Workflow 'coding_mode' completed \u2014 4 steps",
+      "steps": [
+        "\u2705 VS Code",
+        "\u2705 https://leetcode.com",
+        "\u2705 Spotify",
+        "\u2705 system"
+      ]
+    },
+    "timestamp": "2026-05-23T17:58:05.868115",
+    "success": true
+  },
+  {
+    "command": "Start morning mode",
+    "intent": {
+      "action": "unknown",
+      "target": "Start morning mode",
+      "parameters": {},
+      "message": "",
+      "confidence": 0.3
+    },
+    "result": {
+      "success": false,
+      "message": "Unknown action: unknown. Try rephrasing your command."
+    },
+    "timestamp": "2026-05-23T17:57:36.805253",
+    "success": false
+  },
+  {
+    "command": "Start coding mode",
+    "intent": {
+      "action": "workflow",
+      "target": "coding_mode",
+      "parameters": {},
+      "message": "",
+      "confidence": 0.8
+    },
+    "result": {
+      "success": true,
+      "message": "\u2705 Workflow 'coding_mode' completed \u2014 4 steps",
+      "steps": [
+        "\u2705 VS Code",
+        "\u2705 https://leetcode.com",
+        "\u2705 Spotify",
+        "\u2705 system"
+      ]
+    },
+    "timestamp": "2026-05-23T17:52:42.576056",
+    "success": true
+  },
+  {
+    "command": "search chatgpt on browser",
+    "intent": {
+      "action": "google_search",
+      "target": "chatgpt on browser",
+      "parameters": {},
+      "message": "",
+      "confidence": 0.8
+    },
+    "result": {
+      "success": true,
+      "message": "\u2705 Searching Google for: chatgpt on browser",
+      "steps": [
+        "Query: chatgpt on browser",
+        "Encoded URL",
+        "Opened Chrome with search results"
+      ]
+    },
+    "timestamp": "2026-05-23T17:51:38.489789",
+    "success": true
+  },
+  {
+    "command": "open chatgpt in browser",
+    "intent": {
+      "action": "open_app",
+      "target": "chatgpt in browser",
+      "parameters": {},
+      "message": "",
+      "confidence": 0.75
+    },
+    "result": {
+      "success": false,
+      "message": "Could not open chatgpt in browser. Make sure it's installed.",
+      "steps": [
+        "App not found: chatgpt in browser"
+      ]
+    },
+    "timestamp": "2026-05-23T17:51:15.580038",
+    "success": false
+  },
+  {
+    "command": "open spotify",
+    "intent": {
+      "action": "open_app",
+      "target": "spotify",
+      "parameters": {},
+      "message": "",
+      "confidence": 0.75
+    },
+    "result": {
+      "success": true,
+      "message": "\u2705 Opened Spotify",
+      "steps": [
+        "Resolved app: Spotify",
+        "Sent activate signal via AppleScript",
+        "Spotify is now open"
+      ]
+    },
+    "timestamp": "2026-05-23T17:50:23.732246",
+    "success": true
+  },
+  {
+    "command": "search shark exchange and open in browser",
+    "intent": {
+      "action": "open_app",
+      "target": "search shark exchange and  in browser",
+      "parameters": {},
+      "message": "",
+      "confidence": 0.75
+    },
+    "result": {
+      "success": false,
+      "message": "Could not open search shark exchange and  in browser. Make sure it's installed.",
+      "steps": [
+        "App not found: search shark exchange and  in browser"
+      ]
+    },
+    "timestamp": "2026-05-23T17:50:01.129911",
+    "success": false
+  },
+  {
+    "command": "open shark exchange website in safari",
+    "intent": {
+      "action": "open_app",
+      "target": "shark exchange website in safari",
+      "parameters": {},
+      "message": "",
+      "confidence": 0.75
+    },
+    "result": {
+      "success": false,
+      "message": "Could not open shark exchange website in safari. Make sure it's installed.",
+      "steps": [
+        "App not found: shark exchange website in safari"
+      ]
+    },
+    "timestamp": "2026-05-23T17:49:31.428316",
+    "success": false
+  },
+  {
+    "command": "search apple on browser",
+    "intent": {
+      "action": "google_search",
+      "target": "apple on browser",
+      "parameters": {},
+      "message": "",
+      "confidence": 0.8
+    },
+    "result": {
+      "success": true,
+      "message": "\u2705 Searching Google for: apple on browser",
+      "steps": [
+        "Query: apple on browser",
+        "Encoded URL",
+        "Opened Chrome with search results"
+      ]
+    },
+    "timestamp": "2026-05-23T17:49:06.523945",
+    "success": true
+  },
+  {
+    "command": "go to sleep mode",
+    "intent": {
+      "action": "unknown",
+      "target": "go to sleep mode",
+      "parameters": {},
+      "message": "",
+      "confidence": 0.3
+    },
+    "result": {
+      "success": false,
+      "message": "Unknown action: unknown. Try rephrasing your command."
+    },
+    "timestamp": "2026-05-23T17:48:51.679405",
+    "success": false
+  },
+  {
+    "command": "take screenshot",
+    "intent": {
+      "action": "unknown",
+      "target": "take screenshot",
+      "parameters": {},
+      "message": "",
+      "confidence": 0.3
+    },
+    "result": {
+      "success": false,
+      "message": "Unknown action: unknown. Try rephrasing your command."
+    },
+    "timestamp": "2026-05-23T17:48:33.463470",
+    "success": false
+  },
+  {
+    "command": "start work mode",
+    "intent": {
+      "action": "unknown",
+      "target": "start work mode",
+      "parameters": {},
+      "message": "",
+      "confidence": 0.3
+    },
+    "result": {
+      "success": false,
+      "message": "Unknown action: unknown. Try rephrasing your command."
+    },
+    "timestamp": "2026-05-23T17:48:16.380801",
+    "success": false
+  },
+  {
+    "command": "Open WhatsApp and send a message",
+    "intent": {
+      "action": "whatsapp_send",
+      "target": "unknown",
+      "parameters": {},
+      "message": "a message",
+      "confidence": 0.7
+    },
+    "result": {
+      "success": false,
+      "message": "WhatsApp error: Target page, context or browser has been closed. Make sure you're logged into WhatsApp Web.",
+      "steps": []
+    },
+    "timestamp": "2026-05-23T17:47:59.250115",
+    "success": false
+  },
+  {
+    "command": "Show system automation options",
+    "intent": {
+      "action": "unknown",
+      "target": "Show system automation options",
+      "parameters": {},
+      "message": "",
+      "confidence": 0.3
+    },
+    "result": {
+      "success": false,
+      "message": "Unknown action: unknown. Try rephrasing your command."
+    },
+    "timestamp": "2026-05-23T17:47:55.622545",
+    "success": false
+  },
+  {
+    "command": "Open Chrome",
+    "intent": {
+      "action": "open_app",
+      "target": "Chrome",
+      "parameters": {},
+      "message": "",
+      "confidence": 0.75
+    },
+    "result": {
+      "success": true,
+      "message": "\u2705 Opened Google Chrome",
+      "steps": [
+        "Resolved app: Google Chrome",
+        "Sent activate signal via AppleScript",
+        "Google Chrome is now open"
+      ]
+    },
+    "timestamp": "2026-05-23T17:47:49.383441",
+    "success": true
+  },
+  {
+    "command": "Open Chrome",
+    "intent": {
+      "action": "open_app",
+      "target": "Chrome",
+      "parameters": {},
+      "message": "",
+      "confidence": 0.75
+    },
+    "result": {
+      "success": true,
+      "message": "\u2705 Opened Google Chrome",
+      "steps": [
+        "Resolved app: Google Chrome",
+        "Sent activate signal via AppleScript",
+        "Google Chrome is now open"
+      ]
+    },
+    "timestamp": "2026-05-23T17:47:46.001143",
+    "success": true
+  },
+  {
+    "command": "Start morning mode",
+    "intent": {
+      "action": "unknown",
+      "target": "Start morning mode",
+      "parameters": {},
+      "message": "",
+      "confidence": 0.3
+    },
+    "result": {
+      "success": false,
+      "message": "Unknown action: unknown. Try rephrasing your command."
+    },
+    "timestamp": "2026-05-23T17:47:30.416719",
+    "success": false
+  },
+  {
+    "command": "Start work mode",
+    "intent": {
+      "action": "unknown",
+      "target": "Start work mode",
+      "parameters": {},
+      "message": "",
+      "confidence": 0.3
+    },
+    "result": {
+      "success": false,
+      "message": "Unknown action: unknown. Try rephrasing your command."
+    },
+    "timestamp": "2026-05-23T17:47:19.388430",
+    "success": false
+  },
+  {
+    "command": "Start coding mode",
+    "intent": {
+      "action": "workflow",
+      "target": "coding_mode",
+      "parameters": {},
+      "message": "",
+      "confidence": 0.8
+    },
+    "result": {
+      "success": true,
+      "message": "\u2705 Workflow 'coding_mode' completed \u2014 4 steps",
+      "steps": [
+        "\u2705 VS Code",
+        "\u2705 https://leetcode.com",
+        "\u2705 Spotify",
+        "\u2705 system"
+      ]
+    },
+    "timestamp": "2026-05-23T17:47:06.774997",
+    "success": true
+  },
+  {
+    "command": "whatsapp team",
+    "intent": {
+      "action": "whatsapp_send",
+      "target": "unknown",
+      "parameters": {},
+      "message": "whatsapp team",
+      "confidence": 0.7
+    },
+    "result": {
+      "success": false,
+      "message": "WhatsApp error: Timeout 30000ms exceeded.. Make sure you're logged into WhatsApp Web.",
+      "steps": []
+    },
+    "timestamp": "2026-05-23T17:46:15.433396",
+    "success": false
+  },
+  {
+    "command": "open safari",
+    "intent": {
+      "action": "open_app",
+      "target": "safari",
+      "parameters": {},
+      "message": "",
+      "confidence": 0.75
+    },
+    "result": {
+      "success": true,
+      "message": "\u2705 Opened Safari",
+      "steps": [
+        "Resolved app: Safari",
+        "Sent activate signal via AppleScript",
+        "Safari is now open"
+      ]
+    },
+    "timestamp": "2026-05-23T17:45:25.545529",
+    "success": true
+  },
+  {
+    "command": "make folder hello",
+    "intent": {
+      "action": "create_folder",
+      "target": "make  hello",
+      "parameters": {
+        "path": "~/Desktop/make  hello"
+      },
+      "message": "",
+      "confidence": 0.75
+    },
+    "result": {
+      "success": true,
+      "message": "\u2705 Created folder: /Users/abhishektiwari/Desktop/make  hello",
+      "steps": [
+        "Path resolved: /Users/abhishektiwari/Desktop/make  hello",
+        "Directory created",
+        "Opened in Finder"
+      ]
+    },
+    "timestamp": "2026-05-23T17:45:07.027514",
+    "success": true
+  },
+  {
+    "command": "open safari",
+    "intent": {
+      "action": "open_app",
+      "target": "safari",
+      "parameters": {},
+      "message": "",
+      "confidence": 0.75
+    },
+    "result": {
+      "success": true,
+      "message": "\u2705 Opened Safari",
+      "steps": [
+        "Resolved app: Safari",
+        "Sent activate signal via AppleScript",
+        "Safari is now open"
+      ]
+    },
+    "timestamp": "2026-05-23T17:44:46.126105",
+    "success": true
+  },
+  {
+    "command": "open vs code",
+    "intent": {
+      "action": "open_app",
+      "target": "vs code",
+      "parameters": {},
+      "message": "",
+      "confidence": 0.75
+    },
+    "result": {
+      "success": true,
+      "message": "\u2705 Opened Visual Studio Code",
+      "steps": [
+        "Resolved app: Visual Studio Code",
+        "Sent activate signal via AppleScript",
+        "Visual Studio Code is now open"
+      ]
+    },
+    "timestamp": "2026-05-23T17:44:21.669687",
+    "success": true
+  },
+  {
+    "command": "open vs code",
+    "intent": {
+      "action": "open_app",
+      "target": "vs code",
+      "parameters": {},
+      "message": "",
+      "confidence": 0.75
+    },
+    "result": {
+      "success": true,
+      "message": "\u2705 Opened Visual Studio Code",
+      "steps": [
+        "Resolved app: Visual Studio Code",
+        "Sent activate signal via AppleScript",
+        "Visual Studio Code is now open"
+      ]
+    },
+    "timestamp": "2026-05-23T17:43:46.096408",
+    "success": true
+  },
+  {
+    "command": "Show system automation options",
+    "intent": {
+      "action": "unknown",
+      "target": "Show system automation options",
+      "parameters": {},
+      "message": "",
+      "confidence": 0.3
+    },
+    "result": {
+      "success": false,
+      "message": "Unknown action: unknown. Try rephrasing your command."
+    },
+    "timestamp": "2026-05-23T17:43:29.894495",
+    "success": false
+  },
+  {
+    "command": "send Kaifuuuu Hello on whatsapp",
+    "intent": {
+      "action": "whatsapp_send",
+      "target": "unknown",
+      "parameters": {},
+      "message": "kaifuuuu hello on whatsapp",
+      "confidence": 0.7
+    },
+    "result": {
+      "success": false,
+      "message": "WhatsApp error: Timeout 10000ms exceeded.. Make sure you're logged into WhatsApp Web.",
+      "steps": []
+    },
+    "timestamp": "2026-05-23T17:43:19.037541",
+    "success": false
+  },
+  {
+    "command": "whatsapp team",
+    "intent": {
+      "action": "whatsapp_send",
+      "target": "unknown",
+      "parameters": {},
+      "message": "whatsapp team",
+      "confidence": 0.7
+    },
+    "result": {
+      "success": false,
+      "message": "WhatsApp error: Timeout 10000ms exceeded.. Make sure you're logged into WhatsApp Web.",
+      "steps": []
+    },
+    "timestamp": "2026-05-23T17:42:10.861065",
+    "success": false
+  },
+  {
+    "command": "whatsapp team",
+    "intent": {
+      "action": "whatsapp_send",
+      "target": "unknown",
+      "parameters": {},
+      "message": "whatsapp team",
+      "confidence": 0.7
+    },
+    "result": {
+      "success": false,
+      "message": "WhatsApp error: Timeout 30000ms exceeded.. Make sure you're logged into WhatsApp Web.",
+      "steps": []
+    },
+    "timestamp": "2026-05-23T17:40:27.144726",
+    "success": false
+  },
+  {
+    "command": "new folder",
+    "intent": {
+      "action": "create_folder",
+      "target": "new",
+      "parameters": {
+        "path": "~/Desktop/new"
+      },
+      "message": "",
+      "confidence": 0.75
+    },
+    "result": {
+      "success": true,
+      "message": "\u2705 Created folder: /Users/abhishektiwari/Desktop/new",
+      "steps": [
+        "Path resolved: /Users/abhishektiwari/Desktop/new",
+        "Directory created",
+        "Opened in Finder"
+      ]
+    },
+    "timestamp": "2026-05-23T17:39:28.751037",
+    "success": true
+  },
+  {
+    "command": "Open Chrome",
+    "intent": {
+      "action": "open_app",
+      "target": "Chrome",
+      "parameters": {},
+      "message": "",
+      "confidence": 0.75
+    },
+    "result": {
+      "success": true,
+      "message": "\u2705 Opened Google Chrome",
+      "steps": [
+        "Resolved app: Google Chrome",
+        "Sent activate signal via AppleScript",
+        "Google Chrome is now open"
+      ]
+    },
+    "timestamp": "2026-05-23T17:39:11.784129",
+    "success": true
+  }
+]

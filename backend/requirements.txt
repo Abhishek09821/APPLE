@@ -1,0 +1,9 @@
+fastapi==0.110.0
+uvicorn[standard]==0.27.1
+pydantic==2.6.1
+python-dotenv==1.0.1
+google-generativeai==0.4.1
+playwright==1.42.0
+pyautogui==0.9.54
+apscheduler==3.10.4
+httpx==0.27.0
