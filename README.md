@@ -12,7 +12,7 @@ APPLE is a full-stack AI desktop automation assistant. You type (or speak) a com
 
 ## Requirements
 
-- macOS 12+
+- macOS 10+
 - Python 3.10+
 - Node.js 18+
 - Gemini API key (free at https://aistudio.google.com/app/apikey)
