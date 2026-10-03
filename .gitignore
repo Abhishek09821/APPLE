@@ -1,6 +1,13 @@
 venv/
+.venv
+.venv/
 backend/venv/
 node_modules/
 .env
 __pycache__/
 .DS_Store
+.vscode/.venv/
+frontend/dist/
+backend/data/*.db*
+backend/data/whatsapp-profile/
+.pytest_cache/

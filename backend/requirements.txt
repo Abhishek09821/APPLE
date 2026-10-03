@@ -1,9 +1,7 @@
-fastapi==0.110.0
-uvicorn[standard]==0.27.1
-pydantic==2.6.1
-python-dotenv==1.0.1
-google-generativeai==0.4.1
-playwright==1.42.0
-pyautogui==0.9.54
-apscheduler==3.10.4
-httpx==0.27.0
+fastapi>=0.115,<1
+uvicorn[standard]>=0.34,<1
+pydantic>=2.10,<3
+httpx>=0.28,<1
+python-multipart>=0.0.20,<1
+pypdf>=5.3,<7
+playwright>=1.50,<2

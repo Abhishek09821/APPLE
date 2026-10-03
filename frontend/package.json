@@ -1,24 +1,30 @@
 {
   "name": "apple-frontend",
   "private": true,
-  "version": "1.0.0",
+  "version": "2.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "format": "prettier --write src index.html vite.config.js",
+    "format:check": "prettier --check src index.html vite.config.js",
+    "test": "node --test src/utils/*.test.js"
   },
   "dependencies": {
+    "lucide-react": "^0.344.0",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "framer-motion": "^11.0.6",
-    "lucide-react": "^0.344.0"
+    "react-dom": "^18.2.0"
   },
   "devDependencies": {
-    "@vitejs/plugin-react": "^4.2.1",
-    "vite": "^5.1.4",
-    "tailwindcss": "^3.4.1",
+    "@vitejs/plugin-react": "^6.1.1",
     "autoprefixer": "^10.4.18",
-    "postcss": "^8.4.35"
+    "postcss": "^8.4.35",
+    "prettier": "^3.9.9",
+    "tailwindcss": "^3.4.1",
+    "vite": "^8.3.2"
+  },
+  "engines": {
+    "node": ">=22.12.0"
   }
 }
