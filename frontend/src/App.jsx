@@ -41,7 +41,6 @@ import {
   ShieldCheck,
   Square,
   Volume2,
-  VolumeX,
   X,
 } from 'lucide-react'
 import { api, stream } from './utils/api'
@@ -598,8 +597,6 @@ export default function App() {
     })
   }
   const welcome = messages.length === 1
-  const activeTitle =
-    view === 'settings' ? 'Settings' : navigation.find((n) => n.id === view)?.label
 
   return (
     <MotionConfig reducedMotion="user">
@@ -643,39 +640,15 @@ export default function App() {
           theme={preferences.theme}
           onTheme={preferences.toggleTheme}
           onFloat={openFloating}
+          connected={connected}
+          aiReady={status?.ai?.ready}
+          voice={voice}
+          onVoice={toggleVoice}
+          onStop={stop}
         />
 
         <main className="main-shell">
           <div className="global-nav-spacer" />
-          {!isPublic && (
-            <header className="topbar">
-              <div className="breadcrumb">
-                <strong className="workspace-owner">{profile?.name || 'Your workspace'}</strong>
-                <span className="header-slash">/</span>
-                <span>{activeTitle}</span>
-              </div>
-              <div className="top-actions">
-                <span className={`connection ${connected ? 'online' : ''}`}>
-                  <i />
-                  {connected
-                    ? status?.ai?.ready
-                      ? 'AI connected'
-                      : 'Basic tools ready'
-                    : 'Backend offline'}
-                </span>
-                <span className="top-divider" />
-                <IconButton
-                  label={voice ? 'Turn spoken replies off' : 'Turn spoken replies on'}
-                  onClick={toggleVoice}
-                >
-                  {voice ? <Volume2 size={17} /> : <VolumeX size={17} />}
-                </IconButton>
-                <IconButton label="Stop all actions and speech" onClick={stop}>
-                  <Square size={14} />
-                </IconButton>
-              </div>
-            </header>
-          )}
           {error && (
             <div className="banner error" role="alert">
               <CircleHelp size={17} />
@@ -704,7 +677,10 @@ export default function App() {
               {view === 'assistant' && (
                 <>
                   <div className="section-heading">
-                    <span className="session-label">YOUR PERSONAL ASSISTANT</span>
+                    <span className="session-label">
+                      <span className="workspace-owner">{profile?.name || 'Your workspace'}</span>
+                      <span className="session-divider">/</span>ASSISTANT
+                    </span>
                     <button
                       className="subtle-button"
                       disabled={busy || speechPending || messages.some((m) => m.approval)}

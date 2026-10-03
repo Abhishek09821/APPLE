@@ -8,7 +8,7 @@
   color: var(--ink);
   border: 1.5px solid var(--ink);
   border-radius: 8px;
-  box-shadow: 8px 8px 0 #181d1680;
+  box-shadow: 8px 8px 0 #080d1680;
 }
 .welcome-dialog::backdrop {
   background: #161c2066;
@@ -42,14 +42,13 @@
 .welcome-sticker {
   display: inline-block;
   padding: 9px 16px;
-  background: #e7e0f3;
-  color: #242822;
-  border: 1.5px solid #242822;
+  background: var(--surface-raised);
+  color: var(--ink);
+  border: 1.5px solid var(--ink);
   border-radius: 4px;
-  font:
-    italic 24px/1.2 Georgia,
-    serif;
-  transform: rotate(-5deg);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
   margin: 0 0 22px;
 }
 .welcome-content h1 {
@@ -107,16 +106,16 @@
   place-items: center;
   width: 52px;
   height: 52px;
-  border: 1.5px solid #242822;
+  border: 1.5px solid var(--ink);
   border-radius: 7px;
-  color: #242822;
+  color: var(--ink);
   margin: 0 0 24px;
 }
 .tour-icon.green {
-  background: #deebbe;
+  background: var(--surface-raised);
 }
 .tour-icon.violet {
-  background: #e7e0f3;
+  background: var(--surface-raised);
 }
 .tour-steps {
   counter-reset: tour;
@@ -159,16 +158,16 @@
 }
 .tour-example {
   margin: 20px 0;
-  border: 1.5px solid #242822;
+  border: 1.5px solid var(--ink);
   border-radius: 4px;
   padding: 17px 20px;
-  background: #e3edc8;
-  color: #242822;
+  background: var(--surface-raised);
+  color: var(--ink);
   font-size: 17px;
   font-weight: 550;
 }
 .tour-example.violet {
-  background: #e7e0f3;
+  background: var(--surface-raised);
 }
 .tour-actions {
   display: flex;

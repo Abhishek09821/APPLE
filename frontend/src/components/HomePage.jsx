@@ -1,4 +1,6 @@
 import React from 'react'
+import { motion, useReducedMotion } from 'motion/react'
+import { IntelligenceCore } from './VoiceStage'
 import {
   ArrowUpRight,
   ArrowRight,
@@ -11,6 +13,7 @@ import {
 } from 'lucide-react'
 
 export default function HomePage({ navigate, onTour, name }) {
+  const reduced = useReducedMotion()
   return (
     <>
       <section className="neo-hero">
@@ -21,13 +24,7 @@ export default function HomePage({ navigate, onTour, name }) {
           <h1>
             Less clicking.
             <br />
-            More{' '}
-            <span className="marked-word">
-              living.
-              <svg viewBox="0 0 450 22" preserveAspectRatio="none" aria-hidden="true">
-                <path d="M4 15 Q170 0 446 10 M18 20 Q210 7 422 17" />
-              </svg>
-            </span>
+            More <span className="marked-word">living.</span>
           </h1>
           <p className="hero-description">
             Send that message. Find those notes. Talk through something you’re learning. APPLE helps
@@ -44,84 +41,60 @@ export default function HomePage({ navigate, onTour, name }) {
           </div>
           <p className="hero-smallprint">Made for macOS. Runs with a local Ollama model.</p>
         </div>
-        <div className="neo-desk" aria-label="Examples of things you can ask APPLE">
-          <span className="desk-note">
-            A few things to take
-            <br />
-            off your plate ↴
-          </span>
-          <div className="desk-window">
-            <div className="desk-window-bar">
-              <span>
-                <i />
-                <i />
-                <i />
-              </span>
-              <b>YOUR EVERYDAY SHORTCUT</b>
-              <Command size={15} />
-            </div>
-            <div className="desk-window-content">
-              <div className="desk-greeting">
-                <span className="desk-mic">
-                  <Mic size={27} strokeWidth={1.7} />
-                </span>
-                <div>
-                  <p>APPLE</p>
-                  <h2>What’s on your mind?</h2>
-                </div>
-              </div>
-              <div className="example-card green">
-                <MessageCircle size={21} />
-                <div>
-                  <small>KEEP IN TOUCH</small>
-                  <p>“WhatsApp Mum: I’ll be home at 7.”</p>
-                </div>
-                <ArrowUpRight size={18} />
-              </div>
-              <div className="example-card lilac">
-                <BookOpen size={21} />
-                <div>
-                  <small>MAKE IT STICK</small>
-                  <p>“Quiz me on these notes.”</p>
-                </div>
-                <ArrowUpRight size={18} />
-              </div>
-              <div className="example-card cream">
-                <Monitor size={21} />
-                <div>
-                  <small>GET TO IT</small>
-                  <p>“Open Notes.”</p>
-                </div>
-                <ArrowUpRight size={18} />
-              </div>
-              <div className="desk-bottom">
-                <span className="tiny-wave" aria-hidden="true">
-                  <i />
-                  <i />
-                  <i />
-                  <i />
-                  <i />
-                  <i />
-                  <i />
-                </span>
-                <span>Try these in Assistant</span>
-                <span>↵</span>
-              </div>
-            </div>
+        <motion.div
+          className="system-preview"
+          initial={reduced ? false : { opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6 }}
+          aria-label="APPLE interface preview with example requests"
+        >
+          <div className="system-preview-bar">
+            <span>
+              <i /> APPLE / PERSONAL SYSTEM
+            </span>
+            <span>01</span>
           </div>
-          <span className="desk-sticker">
-            YOUR MAC.
-            <br />
-            YOUR PACE.
-            <svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true">
-              <path
-                d="M15 2v26M2 15h26M6 6l18 18M6 24L24 6"
-                stroke="currentColor"
-                strokeWidth="3"
-              />
-            </svg>
-          </span>
-        </div>
+          <div className="system-core-stage">
+            <span className="system-coordinate">VOICE + ACTION</span>
+            <div className="system-reticle" aria-hidden="true" />
+            <IntelligenceCore active={false} reduced={reduced} />
+            <span className="system-core-caption">One familiar voice. A little more done.</span>
+            <span className="system-scan" aria-hidden="true" />
+          </div>
+          <div className="system-requests">
+            <p className="system-requests-label">
+              TRY A REQUEST <span>→</span>
+            </p>
+            {[
+              {
+                icon: MessageCircle,
+                title: '“Tell Mum I’ll be home at 7.”',
+                label: 'MESSAGES',
+                view: 'settings',
+              },
+              {
+                icon: BookOpen,
+                title: '“Quiz me on these notes.”',
+                label: 'LIBRARY',
+                view: 'library',
+              },
+              { icon: Monitor, title: '“Open Notes.”', label: 'YOUR MAC', view: 'assistant' },
+            ].map(({ icon: Icon, title, label, view }) => (
+              <button className="system-request" key={label} onClick={() => navigate(view)}>
+                <Icon size={17} strokeWidth={1.5} />
+                <span>
+                  <small>{label}</small>
+                  {title}
+                </span>
+                <ArrowUpRight size={15} />
+              </button>
+            ))}
+          </div>
+          <div className="system-preview-footer">
+            <span>DESIGNED AROUND YOU</span>
+            <span>macOS</span>
+          </div>
+        </motion.div>
       </section>
       <div className="neo-strip">
         <span>
@@ -145,7 +118,7 @@ export default function HomePage({ navigate, onTour, name }) {
           <p>No new workflow to learn. Start with something you already do every day.</p>
         </div>
         <div className="neo-feature-grid">
-          <article className="neo-feature feature-green">
+          <article className="neo-feature">
             <span className="feature-number">01 / MESSAGES</span>
             <MessageCircle size={32} />
             <h3>
@@ -161,7 +134,7 @@ export default function HomePage({ navigate, onTour, name }) {
               See how contacts work <ArrowUpRight size={18} />
             </button>
           </article>
-          <article className="neo-feature feature-lilac">
+          <article className="neo-feature">
             <span className="feature-number">02 / YOUR NOTES</span>
             <BookOpen size={32} />
             <h3>
@@ -177,7 +150,7 @@ export default function HomePage({ navigate, onTour, name }) {
               Open your library <ArrowUpRight size={18} />
             </button>
           </article>
-          <article className="neo-feature feature-peach">
+          <article className="neo-feature">
             <span className="feature-number">03 / EVERYDAY TASKS</span>
             <Command size={32} />
             <h3>

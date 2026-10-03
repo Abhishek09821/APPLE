@@ -12,14 +12,14 @@ A personal macOS assistant for spoken conversations, everyday computer tasks, Wh
 
 </div>
 
-![APPLE’s neo-brutalist landing page, with a slim navbar and examples of everyday requests](docs/images/home.png)
+![APPLE’s silver and blue system console, with one top-edge navigation bar](docs/images/home-dark.png)
 
 APPLE is an independent project by **Abhishek Tiwari**, not affiliated with Apple Inc.
 
 ## What’s new
 
-- A slim text navbar with a compact mobile menu, consistent page margins, and light/dark themes.
-- A new landing page with warm paper colors, bold borders, and straightforward examples.
+- One full-width navbar: move to the top edge to reveal it, choose a page and it slides away. Tap the handle on touchscreens; use Enter or ↓ from the focused handle with a keyboard. Escape closes it.
+- The original charcoal, silver, and cool blue palette, with a console-style landing page, crisp neo-brutalist panels, subtle hover motion, consistent page margins, and light/dark themes.
 - A **name-only welcome** that remembers your name across conversations and restarts. No email or password.
 - A skippable introduction to **WhatsApp contacts** and the **document library**, replayable from Settings.
 - **Silent scrolling**, with optional quieter click sounds. Interface sounds pause during voice sessions.
@@ -40,9 +40,9 @@ APPLE is an independent project by **Abhishek Tiwari**, not affiliated with Appl
 </table>
 
 <details>
-<summary>Dark appearance, mobile layout, and the library tutorial</summary>
+<summary>Light appearance, mobile layout, and the library tutorial</summary>
 
-![Dark appearance](docs/images/home-dark.png)
+![Light appearance](docs/images/home.png)
 
 <p align="center"><img src="docs/images/home-mobile.png" width="300" alt="APPLE’s responsive mobile landing page" /> <img src="docs/images/library-tour.png" width="440" alt="The library tutorial explains uploads, document questions, and voice lessons" /></p>
 

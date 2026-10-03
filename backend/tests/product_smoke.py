@@ -65,10 +65,11 @@ async def main():
   await context.route('**/api/**',routes)
   context.on('page',lambda tab:tab.on('pageerror',lambda e:errors.append(str(e))))
   page.on('pageerror',lambda e:errors.append(str(e)))
+  async def open_nav():
+   await page.get_by_role('button',name='Show navigation',exact=True).focus()
+   await page.keyboard.press('ArrowDown')
   async def navigate(label):
-   trigger=page.locator('.global-nav-toggle')
-   if await trigger.is_visible():
-    await trigger.focus(); await page.keyboard.press('ArrowDown')
+   await open_nav()
    await page.get_by_role('navigation',name='Main navigation').get_by_role('button',name=label,exact=True).click()
   async def no_overflow():
    assert await page.evaluate('document.documentElement.scrollWidth <= innerWidth'), 'Document overflow'
@@ -78,6 +79,7 @@ async def main():
   nav=await page.get_by_role('navigation',name='Main navigation').bounding_box()
   assert nav['width'] == 1440
   await page.screenshot(path='/tmp/apple-home-dark.png')
+  await open_nav()
   await page.get_by_role('button',name='Switch to light theme').click()
   assert await page.locator('html').get_attribute('data-theme') == 'light'
   await page.wait_for_timeout(300)
@@ -136,6 +138,7 @@ async def main():
   await page.get_by_role('button',name='Dark',exact=True).click()
   await navigate('Assistant')
   # Exercise an actual Document Picture-in-Picture window, not a DOM overlay.
+  await open_nav()
   async with context.expect_page() as event:
    await page.get_by_role('button',name='Float assistant',exact=True).click()
   pip=await event.value
@@ -155,6 +158,7 @@ async def main():
   await page.wait_for_function(ACTIVE)
   await pip.get_by_text('I’m listening.',exact=True).wait_for()
   tones=await page.evaluate('window.clickTones')
+  await open_nav()
   await page.get_by_role('button',name='Switch to light theme').click()
   assert await pip.locator('html').get_attribute('data-theme') == 'light'
   assert await page.evaluate('window.clickTones') == tones, 'UI sound interfered with voice session'
@@ -167,6 +171,7 @@ async def main():
   await pip.get_by_role('button',name='Return to APPLE').click()
   if not pip.is_closed(): await pip.wait_for_event('close')
   assert await page.evaluate(ACTIVE), 'Returning to APPLE ended session'
+  await open_nav()
   async with context.expect_page() as event:
    await page.get_by_role('button',name='Float assistant',exact=True).click()
   pip=await event.value
