@@ -17,7 +17,7 @@ function SignalBar({ index, level, reduced }) {
   return <motion.span className="vc-signal-bar" style={{ height, opacity }} />
 }
 
-function IntelligenceCore({ audioLevel, active, reduced }) {
+export function IntelligenceCore({ audioLevel, active, reduced }) {
   const fallbackLevel = useMotionValue(0)
   const level = audioLevel || fallbackLevel
   const cleanLevel = useTransform(level, (value) =>
@@ -150,6 +150,7 @@ export default function VoiceStage({
   compact,
   listening,
   speaking,
+  canInterrupt,
   busy,
   phase,
   transcript,
@@ -159,6 +160,7 @@ export default function VoiceStage({
   audioLevel,
   onToggle,
   onStop,
+  onInterrupt,
 }) {
   const reduced = useReducedMotion()
   const state = !connected
@@ -189,7 +191,9 @@ export default function VoiceStage({
     listening: 'Go ahead. I’m here.',
     thinking: phase || 'Working on your request.',
     speaking: enabled
-      ? 'You can interrupt me. I’m listening.'
+      ? canInterrupt
+        ? 'You can interrupt me. I’m listening.'
+        : 'I’ll listen after this reply. Tap Interrupt to speak now.'
       : 'Start a voice session to talk with me.',
     review: 'Review the action below.',
     offline: 'Waiting for the local server.',
@@ -246,9 +250,17 @@ export default function VoiceStage({
           {enabled ? 'End session' : 'Start listening'}
         </motion.button>
         {(busy || speaking) && (
-          <button className="vc-stop" onClick={onStop} title="Stop speaking and working">
+          <button
+            className="vc-stop"
+            onClick={enabled && speaking && !canInterrupt ? onInterrupt : onStop}
+            title={
+              enabled && speaking && !canInterrupt
+                ? 'Interrupt this reply and listen'
+                : 'Stop speaking and working'
+            }
+          >
             <Square size={12} fill="currentColor" />
-            Stop
+            {enabled && speaking && !canInterrupt ? 'Interrupt' : 'Stop'}
           </button>
         )}
       </div>

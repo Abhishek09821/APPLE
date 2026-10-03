@@ -10,8 +10,13 @@ import AutomationSetup from './components/AutomationSetup'
 import './tutor.css'
 import AmbientField from './components/AmbientField'
 import RevealNav from './components/RevealNav'
+import ProductPages, { ProductFooter, publicViews } from './components/ProductPages'
+import FloatingAssistant from './components/FloatingAssistant'
+import { useFloatingAssistant } from './hooks/useFloatingAssistant'
+import { usePreferences } from './hooks/usePreferences'
+import { useInterfaceSounds } from './hooks/useInterfaceSounds'
 import { useVoiceTutor } from './hooks/useVoiceTutor'
-import { isPlaybackEcho } from './utils/speech-echo'
+import { PlaybackEchoGuard } from './utils/speech-echo'
 import { useVoiceSession } from './hooks/useVoiceSession'
 import { useAudioEngine } from './hooks/useAudioEngine'
 import './console-shell.css'
@@ -25,6 +30,11 @@ import {
   Command,
   FileText,
   History,
+  Home,
+  Mail,
+  Moon,
+  Sun,
+  PictureInPicture2,
   Layers,
   Loader2,
   Mic,
@@ -40,11 +50,19 @@ import { api, stream } from './utils/api'
 import { IconButton } from './components/ui'
 
 const navigation = [
+  { id: 'home', label: 'About APPLE', icon: Home },
   { id: 'assistant', label: 'Assistant', icon: Command },
   { id: 'library', label: 'Knowledge library', icon: BookOpen },
   { id: 'routines', label: 'My routines', icon: Layers },
   { id: 'activity', label: 'Activity', icon: History },
+  { id: 'contact', label: 'Contact & support', icon: Mail },
+  { id: 'faq', label: 'FAQs', icon: CircleHelp },
+  { id: 'privacy', label: 'Privacy policy', icon: ShieldCheck },
 ]
+const routeView = () => {
+  const id = window.location.hash.slice(1)
+  return [...navigation.map((item) => item.id), 'settings'].includes(id) ? id : 'home'
+}
 const initialMessage = {
   id: 'welcome',
   role: 'assistant',
@@ -77,7 +95,9 @@ const actionLabel = (a) =>
   })[a] || a
 
 export default function App() {
-  const [view, setView] = useState('assistant')
+  const [view, setView] = useState(routeView)
+  const preferences = usePreferences()
+  const isPublic = publicViews.includes(view)
   const [status, setStatus] = useState(null)
   const [connected, setConnected] = useState(false)
   const [messages, setMessages] = useState([initialMessage])
@@ -86,6 +106,12 @@ export default function App() {
   const [phase, setPhase] = useState('')
   const [voice, setVoice] = useState(() => localStorage.getItem('apple-voice') !== 'false')
   const [speechPending, setSpeechPending] = useState(false)
+  const [speechTail, setSpeechTail] = useState(false)
+  const speechTailTimer = useRef(null)
+  const playbackSequence = useRef(0)
+  const [speechLanguage, setSpeechLanguage] = useState(
+    () => localStorage.getItem('apple-speech-language') || 'en-IN',
+  )
   const audio = useAudioEngine()
   const speaking = audio.speaking
   const [documents, setDocuments] = useState([])
@@ -109,6 +135,7 @@ export default function App() {
   const [librarySearch, setLibrarySearch] = useState('')
   const [filePath, setFilePath] = useState('')
   const [speechRate, setSpeechRate] = useState(175)
+  const [expressiveVoice, setExpressiveVoice] = useState(true)
   const controller = useRef(null)
   const speechQueue = useRef(Promise.resolve())
   const speechEpoch = useRef(0)
@@ -119,12 +146,13 @@ export default function App() {
   const fileInput = useRef(null)
   const session = useRef(crypto.randomUUID())
   const busyRef = useRef(false)
-  const spoken = useRef({ text: '', until: 0 })
+  const echoGuard = useRef(new PlaybackEchoGuard())
   const tutor = useVoiceTutor({
     speak,
     cancelSpeech,
     onError: setError,
     onStart: () => {
+      setError('')
       setView('assistant')
       setVoice(true)
       localStorage.setItem('apple-voice', 'true')
@@ -140,13 +168,12 @@ export default function App() {
       ['preparing', 'grading'].includes(tutor.lesson?.stage) ||
       approvalPending ||
       view !== 'assistant' ||
-      !connected,
+      !connected ||
+      (!audio.canInterrupt && (speaking || speechTail)),
+    acquireInput: audio.acquireInput,
+    language: speechLanguage,
     onCommand: handleVoiceCommand,
-    acceptTranscript: (text) =>
-      !(
-        (speaking || Date.now() < spoken.current.until) &&
-        isPlaybackEcho(text, spoken.current.text)
-      ),
+    acceptTranscript: (text) => echoGuard.current.accepts(text),
     onSpeech: () => {
       if (speaking || speechPending) {
         tutor.interrupt()
@@ -156,9 +183,59 @@ export default function App() {
     onError: setError,
   })
   const listening = voiceSession.listening
+  const floating = useFloatingAssistant({
+    theme: preferences.theme,
+    onError: setError,
+    onClose: () => {
+      voiceSession.stop()
+      tutor.stop()
+    },
+  })
+  useInterfaceSounds({
+    extraDocument: floating.floatingWindow?.document,
+    enabled: preferences.sounds,
+    volume: preferences.soundVolume,
+    muted: voiceSession.enabled || speaking || speechPending,
+  })
+  function navigate(id) {
+    if (id !== 'assistant') tutor.stop()
+    setView(id)
+    setError('')
+    if (window.location.hash !== `#${id}`) window.history.pushState(null, '', `#${id}`)
+    document.querySelector('.primary-content')?.scrollTo(0, 0)
+  }
+  function openFloating() {
+    navigate('assistant')
+    floating.open()
+  }
   useEffect(() => {
-    if (!speaking) spoken.current.until = Date.now() + 650
-  }, [speaking])
+    const update = () => {
+      const id = routeView()
+      if (id !== 'assistant') tutor.stop()
+      setView(id)
+    }
+    window.addEventListener('hashchange', update)
+    return () => window.removeEventListener('hashchange', update)
+  }, [])
+  useEffect(() => {
+    if (window.location.hash !== `#${view}`) window.history.replaceState(null, '', `#${view}`)
+  }, [view])
+  async function historyDeleted(selection) {
+    if (
+      selection === 'all' ||
+      history.some((item) => selection.includes(item.id) && item.session_id === session.current)
+    ) {
+      await stop()
+      setMessages([initialMessage])
+      session.current = crypto.randomUUID()
+    }
+    setHistory((previous) =>
+      selection === 'all' ? [] : previous.filter((item) => !selection.includes(item.id)),
+    )
+    await refresh()
+    setNotice('History deleted.')
+  }
+  useEffect(() => () => clearTimeout(speechTailTimer.current), [])
   function handleVoiceCommand(text) {
     if (/^(?:wait|pause|stop talking|listen)[.!?]?$/i.test(text.trim())) {
       cancelSpeech()
@@ -175,29 +252,6 @@ export default function App() {
     if (['question', 'answer'].includes(tutor.lesson?.stage)) return tutor.submit(text)
     return send(text)
   }
-  useEffect(() => {
-    if (!listening) return
-    let stale = false
-    let release
-    const microphoneController = new AbortController()
-    audio
-      .monitorMicrophone(microphoneController.signal)
-      .then((cleanup) => {
-        if (stale) cleanup()
-        else release = cleanup
-      })
-      .catch(() => {
-        if (!stale)
-          setNotice(
-            'Audio visualization could not access the microphone. Voice recognition can still continue.',
-          )
-      })
-    return () => {
-      stale = true
-      microphoneController.abort()
-      release?.()
-    }
-  }, [listening, audio.monitorMicrophone])
 
   async function refresh() {
     try {
@@ -226,6 +280,7 @@ export default function App() {
       if (s && live) {
         setModel(s.settings.model)
         setSpeechRate(s.settings.speech_rate)
+        setExpressiveVoice(s.settings.expressive_voice !== false)
         setAutomation(s.settings.automation_enabled)
         setAutoTutor(s.settings.auto_tutor !== false)
       }
@@ -273,9 +328,24 @@ export default function App() {
       .catch(() => {})
       .then(async () => {
         if (epoch !== speechEpoch.current) return
-        spoken.current = { text, until: 0 }
-        await audio.play(text)
-        spoken.current.until = Date.now() + 650
+        let ended, playback
+        try {
+          await audio.play(text, (reference) => {
+            ended = echoGuard.current.begin(reference)
+            playback = ++playbackSequence.current
+            // Pause synchronously before the first audio sample, not after a
+            // React render. Unsupported browsers use safe turn-taking.
+            if (!audio.canInterrupt) voiceSession.pause()
+            clearTimeout(speechTailTimer.current)
+            setSpeechTail(true)
+          })
+        } finally {
+          ended?.()
+          if (playback === playbackSequence.current) {
+            clearTimeout(speechTailTimer.current)
+            speechTailTimer.current = setTimeout(() => setSpeechTail(false), 900)
+          }
+        }
       })
       .catch((e) => {
         if (epoch === speechEpoch.current) setError(e.message)
@@ -493,7 +563,8 @@ export default function App() {
     if (fileInput.current) fileInput.current.value = ''
   }
   async function afterImport(document) {
-    await refresh()
+    setDocuments((previous) => [document, ...previous.filter((item) => item.id !== document.id)])
+    void refresh()
     setSelectedDoc(document)
     setNotice('Document added to your local library.')
     if (autoTutor) await tutor.start(document)
@@ -513,9 +584,11 @@ export default function App() {
 
   return (
     <MotionConfig reducedMotion="user">
-      <div className={`app-shell console-shell ${view === 'assistant' ? 'console-active' : ''}`}>
+      <div
+        className={`app-shell console-shell ${isPublic ? 'public-shell' : ''} ${view === 'assistant' ? 'console-active' : ''}`}
+      >
         <AmbientField audioLevel={audio.level} />
-        {status && !status.settings.setup_completed && (
+        {!isPublic && status && !status.settings.setup_completed && (
           <AutomationSetup
             working={working}
             onChoose={(enabled) =>
@@ -537,41 +610,56 @@ export default function App() {
         <RevealNav
           view={view}
           navigation={navigation}
-          onNavigate={(id) => {
-            if (id !== 'assistant') tutor.stop()
-            setView(id)
-            setError('')
-          }}
+          onNavigate={navigate}
+          persistent={isPublic}
+          theme={preferences.theme}
+          onTheme={preferences.toggleTheme}
+          sounds={preferences.sounds}
+          onSounds={() => preferences.setSounds(!preferences.sounds)}
+          onFloat={openFloating}
         />
 
         <main className="main-shell">
-          <header className="topbar">
-            <div className="breadcrumb">
-              <strong className="console-wordmark">APPLE</strong>
-              <span className="header-slash">/</span>
-              <span>{activeTitle}</span>
-            </div>
-            <div className="top-actions">
-              <span className={`connection ${connected ? 'online' : ''}`}>
-                <i />
-                {connected
-                  ? status?.ai?.ready
-                    ? 'AI connected'
-                    : 'Basic tools ready'
-                  : 'Backend offline'}
-              </span>
-              <span className="top-divider" />
-              <IconButton
-                label={voice ? 'Turn spoken replies off' : 'Turn spoken replies on'}
-                onClick={toggleVoice}
-              >
-                {voice ? <Volume2 size={17} /> : <VolumeX size={17} />}
-              </IconButton>
-              <IconButton label="Stop all actions and speech" onClick={stop}>
-                <Square size={14} />
-              </IconButton>
-            </div>
-          </header>
+          {isPublic ? (
+            <div className="public-nav-spacer" />
+          ) : (
+            <header className="topbar">
+              <div className="breadcrumb">
+                <strong className="console-wordmark">APPLE</strong>
+                <span className="header-slash">/</span>
+                <span>{activeTitle}</span>
+              </div>
+              <div className="top-actions">
+                <span className={`connection ${connected ? 'online' : ''}`}>
+                  <i />
+                  {connected
+                    ? status?.ai?.ready
+                      ? 'AI connected'
+                      : 'Basic tools ready'
+                    : 'Backend offline'}
+                </span>
+                <span className="top-divider" />
+                <IconButton label="Float assistant" onClick={openFloating}>
+                  <PictureInPicture2 size={17} />
+                </IconButton>
+                <IconButton
+                  label={`Switch to ${preferences.theme === 'dark' ? 'light' : 'dark'} theme`}
+                  onClick={preferences.toggleTheme}
+                >
+                  {preferences.theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
+                </IconButton>
+                <IconButton
+                  label={voice ? 'Turn spoken replies off' : 'Turn spoken replies on'}
+                  onClick={toggleVoice}
+                >
+                  {voice ? <Volume2 size={17} /> : <VolumeX size={17} />}
+                </IconButton>
+                <IconButton label="Stop all actions and speech" onClick={stop}>
+                  <Square size={14} />
+                </IconButton>
+              </div>
+            </header>
+          )}
           {error && (
             <div className="banner error" role="alert">
               <CircleHelp size={17} />
@@ -589,6 +677,7 @@ export default function App() {
           )}
           <div className="content-layout">
             <div className={`primary-content ${view === 'assistant' ? 'chat-content' : ''}`}>
+              {isPublic && <ProductPages view={view} navigate={navigate} />}
               {view === 'assistant' && (
                 <>
                   <div className="section-heading">
@@ -626,6 +715,8 @@ export default function App() {
                       approval={approvalPending}
                       onToggle={toggleSession}
                       onStop={stop}
+                      onInterrupt={cancelSpeech}
+                      canInterrupt={audio.canInterrupt}
                       onLibrary={() => setView('library')}
                       onPrompt={send}
                     />
@@ -911,10 +1002,15 @@ export default function App() {
                 />
               )}
 
-              {view === 'activity' && <ActivityView history={history} />}
+              {view === 'activity' && <ActivityView history={history} onDeleted={historyDeleted} />}
 
               {view === 'settings' && (
                 <SettingsView
+                  preferences={preferences}
+                  onFloat={openFloating}
+                  floatingSupported={floating.supported}
+                  expressiveVoice={expressiveVoice}
+                  setExpressiveVoice={setExpressiveVoice}
                   status={status}
                   memories={memories}
                   automation={automation}
@@ -929,6 +1025,11 @@ export default function App() {
                   toggleVoice={toggleVoice}
                   speechRate={speechRate}
                   setSpeechRate={setSpeechRate}
+                  speechLanguage={speechLanguage}
+                  setSpeechLanguage={(language) => {
+                    setSpeechLanguage(language)
+                    localStorage.setItem('apple-speech-language', language)
+                  }}
                   speak={speak}
                   working={working}
                   doWork={doWork}
@@ -936,6 +1037,7 @@ export default function App() {
               )}
             </div>
           </div>
+          {!isPublic && <ProductFooter compact navigate={navigate} />}
           <input
             ref={fileInput}
             type="file"
@@ -944,6 +1046,30 @@ export default function App() {
             onChange={(e) => upload(e.target.files[0])}
           />
         </main>
+        <FloatingAssistant
+          window={floating.floatingWindow}
+          listening={listening}
+          speaking={speaking}
+          busy={busy || speechPending || ['preparing', 'grading'].includes(tutor.lesson?.stage)}
+          enabled={voiceSession.enabled}
+          connected={connected}
+          approval={approvalPending}
+          transcript={voiceSession.transcript}
+          reply={
+            error ||
+            [...messages]
+              .reverse()
+              .find((message) => message.role === 'assistant' && !message.welcome)?.text
+          }
+          audioLevel={audio.level}
+          onToggle={toggleSession}
+          onStop={stop}
+          onReturn={() => {
+            navigate('assistant')
+            floating.close(true)
+          }}
+          onSend={send}
+        />
       </div>
     </MotionConfig>
   )

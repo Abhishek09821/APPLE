@@ -84,8 +84,8 @@ class DocumentTutorTests(unittest.IsolatedAsyncioTestCase):
     async def test_quiz_hides_source_evidence_and_starts_at_first_question(self):
         imported = knowledge.ingest('notes.txt', b'Gravity attracts objects. Cells contain DNA.')
         raw = json.dumps({'questions': [
-            {'question': 'What does gravity do?', 'answer': 'Attracts objects.', 'page': 1, 'evidence': 'Gravity attracts objects.'},
-            {'question': 'What does gravity do?', 'answer': 'Attracts objects.', 'page': 1, 'evidence': 'Gravity attracts objects.'},
+            {'question': 'What does gravity do?', 'answer': 'Attracts objects.', 'source_id': 'S1'},
+            {'question': 'What does gravity do?', 'answer': 'Attracts objects.', 'source_id': 'S1'},
         ]})
         with patch.object(knowledge, 'generate', AsyncMock(return_value=raw)):
             quiz = knowledge.public_quiz(await knowledge.make_quiz(imported['id']))
@@ -96,12 +96,100 @@ class DocumentTutorTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(quiz['progress']['answered'], 0)
         self.assertFalse(quiz['completed'])
 
-    async def test_hallucinated_evidence_does_not_persist_quiz(self):
+    async def test_hallucinated_answer_becomes_grounded_source_review(self):
         imported = knowledge.ingest('notes.txt', b'Gravity attracts objects.')
-        raw = json.dumps({'questions': [{'question': 'What does gravity do?', 'answer': 'Repels objects.', 'page': 1, 'evidence': 'Gravity repels objects.'}]})
+        raw = json.dumps({'questions': [{'question': 'What does gravity do?', 'answer': 'Repels objects.', 'source_id': 'S1'}]})
         with patch.object(knowledge, 'generate', AsyncMock(return_value=raw)):
-            with self.assertRaisesRegex(ValueError, 'unsupported source evidence'):
-                await knowledge.make_quiz(imported['id'])
+            quiz = await knowledge.make_quiz(imported['id'])
+        self.assertEqual(quiz['generation_mode'], 'source_review')
+        self.assertNotIn('repels', json.dumps(quiz).lower())
+        self.assertEqual(quiz['questions'][0]['evidence'], 'Gravity attracts objects.')
+        self.assertEqual(storage.list_records('quiz_template'), [])
+
+    async def test_one_invalid_item_does_not_discard_valid_questions(self):
+        imported = knowledge.ingest('notes.txt', b'Gravity attracts objects. Cells contain DNA.')
+        raw = json.dumps({'questions': [
+            {'question': 'What does gravity do?', 'answer': 'attracts objects', 'source_id': 'S1'},
+            {'question': 'What does gravity do?', 'answer': 'repels objects', 'source_id': 'S1'},
+            {'question': 'What do cells contain?', 'answer': 'DNA', 'source_id': 'S2'},
+            {'question': 'Invented source?', 'answer': 'DNA', 'source_id': 'S99'},
+            {'question': 'Missing reference?'}]})
+        with patch.object(knowledge, 'generate', AsyncMock(return_value=raw)):
+            quiz = await knowledge.make_quiz(imported['id'])
+        self.assertEqual(quiz['generation_mode'], 'generated')
+        self.assertEqual([q['answer'] for q in quiz['questions']], ['attracts objects', 'DNA'])
+        self.assertNotIn('repels', json.dumps(quiz))
+
+    async def test_cached_questions_start_a_fresh_session_without_model_work(self):
+        imported = knowledge.ingest('notes.txt', b'Gravity attracts objects.')
+        raw = '{"questions":[{"question":"What does gravity do?","answer":"attracts objects","source_id":"S1"}]}'
+        with patch.object(knowledge, 'generate', AsyncMock(return_value=raw)) as model:
+            first = await knowledge.make_quiz(imported['id'])
+            await knowledge.grade_answer(first['id'], first['questions'][0]['id'], 'attracts objects')
+            second = await knowledge.make_quiz(imported['id'])
+        model.assert_awaited_once()
+        self.assertNotEqual(first['id'], second['id'])
+        self.assertNotEqual(first['questions'][0]['id'], second['questions'][0]['id'])
+        self.assertEqual(second['answers'], {})
+        self.assertEqual(knowledge.public_quiz(second)['progress']['answered'], 0)
+
+    async def test_concurrent_preparation_shares_generation_but_not_answers(self):
+        imported = knowledge.ingest('notes.txt', b'Gravity attracts objects.')
+        async def prepare(*args, **kwargs):
+            await asyncio.sleep(.01)
+            return '{"questions":[{"question":"What does gravity do?","answer":"attracts objects","source_id":"S1"}]}'
+        with patch.object(knowledge, 'generate', AsyncMock(side_effect=prepare)) as model:
+            one, two = await asyncio.gather(knowledge.make_quiz(imported['id']), knowledge.make_quiz(imported['id']))
+        model.assert_awaited_once()
+        self.assertNotEqual(one['id'], two['id'])
+
+    async def test_template_invalidates_when_source_or_model_changes(self):
+        imported = knowledge.ingest('notes.txt', b'Gravity attracts objects.')
+        raw = '{"questions":[{"question":"What does gravity do?","answer":"attracts objects","source_id":"S1"}]}'
+        with patch.object(knowledge, 'generate', AsyncMock(return_value=raw)) as model:
+            await knowledge.make_quiz(imported['id'])
+            storage.put('settings', {'model': 'different-model'}, 'settings')
+            await knowledge.make_quiz(imported['id'])
+            doc = storage.get('document', imported['id'])
+            doc['chunks'][0]['text'] += ' Cells contain DNA.'
+            storage.put('document', doc, doc['id'])
+            await knowledge.make_quiz(imported['id'])
+        self.assertEqual(model.await_count, 3)
+
+    async def test_invalid_json_and_model_unavailability_offer_exact_source_review(self):
+        imported = knowledge.ingest('notes.txt', b'Gravity attracts objects. Cells contain DNA.')
+        for output in ['{"questions": [', '[]', knowledge.ModelUnavailable('Model offline')]:
+            with self.subTest(output=str(output)):
+                mock = AsyncMock(side_effect=output) if isinstance(output, Exception) else AsyncMock(return_value=output)
+                with patch.object(knowledge, 'generate', mock):
+                    quiz = await knowledge.make_quiz(imported['id'])
+                self.assertEqual(quiz['generation_mode'], 'source_review')
+                for question in quiz['questions']:
+                    self.assertIn(question['answer'], question['evidence'])
+                    self.assertIn(question['evidence'], 'Gravity attracts objects. Cells contain DNA.')
+
+    def test_quote_matching_tolerates_pdf_typography_without_accepting_inventions(self):
+        self.assertTrue(knowledge._contains_quote('Built a real–time appli-\ncation using React.', 'real-time application'))
+        self.assertTrue(knowledge._contains_quote('The ﬁle contains “examples”.', 'file contains "examples"'))
+        self.assertFalse(knowledge._contains_quote('Uses React.', 'act'))
+        self.assertFalse(knowledge._contains_quote('Gravity attracts objects.', 'Gravity repels objects.'))
+
+    async def test_stop_cancels_duplicate_quiz_preparation_before_cache_is_written(self):
+        imported = knowledge.ingest('notes.txt', b'Gravity attracts objects.')
+        started = asyncio.Event()
+        async def slow(*args, **kwargs):
+            started.set()
+            await asyncio.sleep(60)
+        with patch.object(knowledge, 'generate', AsyncMock(side_effect=slow)) as model:
+            first = asyncio.create_task(knowledge.make_quiz(imported['id']))
+            await started.wait()
+            second = asyncio.create_task(knowledge.make_quiz(imported['id']))
+            await asyncio.sleep(0)
+            await knowledge.cancel_study_tasks()
+            result = await asyncio.gather(first, second, return_exceptions=True)
+        self.assertTrue(all(isinstance(item, asyncio.CancelledError) for item in result))
+        model.assert_awaited_once()
+        self.assertEqual(storage.list_records('quiz_template'), [])
         self.assertEqual(storage.list_records('quiz'), [])
 
     async def test_spoken_answer_then_skip_yields_next_question_and_final_score(self):
@@ -167,6 +255,26 @@ class DocumentTutorTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaisesRegex(ValueError, 'too long'):
                 await knowledge._study_generate('system', 'prompt', timeout=0.01)
         self.assertEqual(knowledge.STUDY_TASKS, set())
+
+    async def test_closed_browser_request_cancels_model_and_does_not_save_quiz(self):
+        from types import SimpleNamespace
+        from fastapi import HTTPException
+        import main
+        imported = knowledge.ingest('notes.txt', b'Gravity attracts objects.')
+        cancelled = asyncio.Event()
+        async def slow(*args, **kwargs):
+            try:
+                await asyncio.sleep(60)
+            finally:
+                cancelled.set()
+        with patch.object(knowledge, 'generate', AsyncMock(side_effect=slow)):
+            with self.assertRaises(HTTPException) as result:
+                await main.study_request(SimpleNamespace(is_disconnected=AsyncMock(return_value=True)),
+                                         knowledge.make_quiz(imported['id']))
+        self.assertEqual(result.exception.status_code, 499)
+        self.assertTrue(cancelled.is_set())
+        self.assertEqual(storage.list_records('quiz'), [])
+        self.assertEqual(storage.list_records('quiz_template'), [])
 
     async def test_stop_also_cancels_answers_waiting_for_the_quiz_lock(self):
         quiz = self.save_quiz()

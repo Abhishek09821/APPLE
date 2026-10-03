@@ -35,6 +35,7 @@ class Settings(BaseModel):
     model: str = Field(default='qwen3:8b', min_length=1, max_length=100)
     voice: bool = True
     speech_rate: int = Field(default=175, ge=100, le=250)
+    expressive_voice: bool = True
     automation_enabled: bool = False
     setup_completed: bool = False
     auto_tutor: bool = True

@@ -68,8 +68,8 @@ export default function LibraryView({
             ))}
           </div>
           <span className="eyebrow">
-            QUESTION {questionIndex + 1} OF {quiz.questions.length} · PAGE{' '}
-            {quiz.questions[questionIndex].page}
+            QUESTION {questionIndex + 1} OF {quiz.questions.length} ·{' '}
+            {quiz.citation_label || 'Page'} {quiz.questions[questionIndex].page}
           </span>
           <h2>{quiz.questions[questionIndex].question}</h2>
           <textarea

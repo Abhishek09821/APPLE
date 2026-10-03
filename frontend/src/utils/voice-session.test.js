@@ -11,15 +11,16 @@ function setup(onCommand = () => {}, extra = {}) {
     constructor() {
       instances.push(this)
     }
-    start() {
+    start(track) {
+      this.track = track
       this.onstart?.()
     }
     abort() {
       this.aborted = true
       this.onend?.()
     }
-    result(text, isFinal = true) {
-      const result = Object.assign([{ transcript: text }], { isFinal })
+    result(text, isFinal = true, confidence = 0.9) {
+      const result = Object.assign([{ transcript: text, confidence }], { isFinal })
       this.onresult?.({ results: [result] })
     }
   }
@@ -158,4 +159,59 @@ test('silence can restart, but suspending discards captured speech', async () =>
   end()
   await settle()
   assert.deepEqual(s.commands, [])
+})
+
+test('recognition uses the processed track across restarts and releases it on Stop', async () => {
+  const track = { kind: 'audio', readyState: 'live' }
+  let releases = 0,
+    captures = 0
+  const s = setup(() => {}, {
+    acquireInput: async () => {
+      captures++
+      return { track, release: () => releases++ }
+    },
+    getLanguage: () => 'hi-IN',
+  })
+  s.session.enable()
+  await settle()
+  assert.equal(s.instances[0].track, track)
+  assert.equal(s.instances[0].lang, 'hi-IN')
+  s.instances[0].onend()
+  s.tick()
+  assert.equal(s.instances[1].track, track)
+  assert.equal(captures, 1)
+  s.session.disable()
+  assert.equal(releases, 1)
+})
+
+test('a late microphone grant cannot start recognition after Stop', async () => {
+  let resolve,
+    released = false
+  const s = setup(() => {}, {
+    acquireInput: () =>
+      new Promise((r) => {
+        resolve = r
+      }),
+  })
+  s.session.enable()
+  s.session.disable()
+  resolve({
+    track: {},
+    release: () => {
+      released = true
+    },
+  })
+  await settle()
+  assert.equal(released, true)
+  assert.equal(s.instances.length, 0)
+})
+
+test('a positively low confidence transcript never executes', async () => {
+  const s = setup()
+  s.session.enable()
+  s.instances[0].result('send hello to someone', true, 0.32)
+  s.instances[0].onend()
+  await settle()
+  assert.deepEqual(s.commands, [])
+  assert.match(s.errors[0], /didn’t catch/)
 })

@@ -10,6 +10,7 @@ export function useAudioEngine() {
   const meters = useRef({})
   const levels = useRef({ input: 0, output: 0 })
   const [speaking, setSpeaking] = useState(false)
+  const [canInterrupt, setCanInterrupt] = useState(false)
 
   const prepare = useCallback(async () => {
     if (!context.current || context.current.state === 'closed') {
@@ -65,7 +66,7 @@ export function useAudioEngine() {
   }, [])
 
   const play = useCallback(
-    async (text) => {
+    async (text, onPlayback) => {
       const epoch = generation.current
       const ctx = await prepare()
       if (epoch !== generation.current) return
@@ -89,6 +90,8 @@ export function useAudioEngine() {
         analyser.connect(ctx.destination)
         job.source = source
         job.release = measure(analyser)
+        const reference = response.headers.get('X-Apple-Spoken-Text')
+        onPlayback?.(reference ? decodeURIComponent(reference) : text)
         setSpeaking(true)
         await new Promise((resolve) => {
           source.onended = resolve
@@ -107,14 +110,32 @@ export function useAudioEngine() {
     [measure, prepare],
   )
 
-  const monitorMicrophone = useCallback(
+  const acquireInput = useCallback(
     async (signal) => {
-      if (signal?.aborted) return () => {}
+      if (signal?.aborted) return { release: () => {} }
       const ctx = await prepare()
-      if (signal?.aborted) return () => {}
+      if (signal?.aborted) return { release: () => {} }
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
       })
+      const track = stream.getAudioTracks()[0]
+      // Chrome 135+ accepts this actual processed track for recognition. Other
+      // browsers may silently ignore the argument, so use turn-taking there.
+      const chrome = navigator.userAgent.match(/(?:Chrome|Chromium)\/(\d+)/)
+      const trackInput = Boolean(
+        chrome && Number(chrome[1]) >= 135 && !/Android/.test(navigator.userAgent),
+      )
+      if (trackInput) {
+        try {
+          await track.applyConstraints({
+            echoCancellation: { exact: 'all' },
+            noiseSuppression: true,
+          })
+        } catch {
+          // Keep ordinary AEC, but don't promise speaker-safe interruption.
+        }
+      }
+      const duplex = trackInput && track.getSettings().echoCancellation === 'all'
       let source, analyser, release
       let closed = false
       const cleanup = () => {
@@ -130,7 +151,7 @@ export function useAudioEngine() {
       // or keep the physical microphone open after a session ends.
       if (signal?.aborted || ctx.state === 'closed') {
         cleanup()
-        return cleanup
+        return { release: cleanup }
       }
       try {
         source = ctx.createMediaStreamSource(stream)
@@ -139,7 +160,8 @@ export function useAudioEngine() {
         source.connect(analyser) // Deliberately no connection to speakers.
         release = measure(analyser, 'input')
         signal?.addEventListener('abort', cleanup, { once: true })
-        return cleanup
+        setCanInterrupt(duplex)
+        return { track: trackInput ? track : null, canInterrupt: duplex, release: cleanup }
       } catch (error) {
         cleanup()
         throw error
@@ -157,5 +179,5 @@ export function useAudioEngine() {
     [stop],
   )
 
-  return { level, speaking, prepare, play, stop, monitorMicrophone }
+  return { level, speaking, canInterrupt, prepare, play, stop, acquireInput }
 }

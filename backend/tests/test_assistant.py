@@ -79,6 +79,16 @@ class AssistantTests(unittest.TestCase):
         process.wait.assert_awaited_once()
         main.SPEECH = None
 
+    def test_audio_response_exposes_exact_cleaned_speech_for_echo_filter(self):
+        from urllib.parse import unquote
+        text = 'नमस्ते! **One.** Two. Three. https://example.com 😊'
+        with patch.object(main.platform, 'system', return_value='Darwin'), \
+             patch.object(main, 'render_audio', AsyncMock(return_value=b'RIFFfixture')):
+            response = self.post('/speech/audio', json={'text': text})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(unquote(response.headers['X-Apple-Spoken-Text']), main.spoken_text(text))
+        self.assertIn('The details are on screen.', unquote(response.headers['X-Apple-Spoken-Text']))
+
     def test_document_path_rejects_outside_home(self):
         self.assertEqual(self.post('/documents/import', json={'path': '/etc/passwd'}).status_code, 400)
 
@@ -173,16 +183,20 @@ class AssistantTests(unittest.TestCase):
 
     def test_quiz_hides_answers_then_grades_and_persists(self):
         doc = knowledge.ingest('science.txt', b'Gravity attracts objects. Mass is measured in kilograms.')
-        quiz_json = json.dumps({'questions': [{'question': 'What does gravity do?', 'answer': 'Attracts objects.', 'page': 1}]})
+        quiz_json = json.dumps({'questions': [{'question': 'What does gravity do?', 'answer': 'Attracts objects.', 'source_id': 'S1'}]})
         with patch.object(knowledge, 'generate', AsyncMock(return_value=quiz_json)):
             res = self.post('/documents/' + doc['id'] + '/quiz')
         self.assertEqual(res.status_code, 200, res.text)
         quiz = res.json(); question = quiz['questions'][0]
+        self.assertEqual(question['question'], 'What does gravity do?')
         self.assertNotIn('answer', question)
         with patch.object(knowledge, 'generate', AsyncMock(return_value='{"score":2,"feedback":"Correct."}')):
             res = self.post('/quizzes/' + quiz['id'] + '/answer', json={'question_id': question['id'], 'answer': 'Attracts objects'})
         self.assertEqual(res.json()['score'], 2)
         self.assertIn(question['id'], storage.get('quiz', quiz['id'])['answers'])
+        self.assertIsNotNone(storage.get('quiz_template', knowledge.quiz_cache_id(doc['id'])))
+        self.client.delete('/api/documents/' + doc['id'], headers=self.headers)
+        self.assertIsNone(storage.get('quiz_template', knowledge.quiz_cache_id(doc['id'])))
 
     def test_invalid_quiz_citation_rejected(self):
         doc = knowledge.ingest('notes.txt', b'Hello science')

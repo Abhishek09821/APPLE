@@ -102,6 +102,20 @@ class SpokenCommandTests(unittest.TestCase):
         self.assertIsNone(ai_parser.basic_plan('Open Notes and then send my passwords'))
         self.assertIsNone(ai_parser.basic_plan('Search cats then open Notes'))
 
+    def test_explicit_app_click_and_search_routes_preserve_control_names(self):
+        for command, target, control in [('click the plus button in Calculator', 'Calculator', 'the plus button'),
+                                         ('press = in Calculator', 'Calculator', '='),
+                                         ('tap Action button in Notes', 'Notes', 'Action button')]:
+            with self.subTest(command=command):
+                action = ai_parser.basic_plan(command).actions[0]
+                self.assertEqual((action.action, action.target, action.control), ('click_control', target, control))
+        action = ai_parser.basic_plan('Search Mozart on Spotify').actions[0]
+        self.assertEqual((action.action, action.target, action.message), ('search_app', 'Spotify', 'Mozart'))
+        self.assertIsNone(ai_parser.basic_plan('Click Add in Calculator and then open Notes'))
+        for key, expected in [('Return', 'enter'), ('Tab', 'tab'), ('Esc', 'escape')]:
+            action = ai_parser.basic_plan(f'Press the {key} key in Notes').actions[0]
+            self.assertEqual((action.action, action.target, action.message), ('press_key', 'Notes', expected))
+
 
 class LocalPlannerTests(unittest.IsolatedAsyncioTestCase):
     async def test_commands_and_greetings_skip_model_and_history(self):

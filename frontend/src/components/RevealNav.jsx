@@ -1,9 +1,21 @@
 import React, { useEffect, useId, useRef, useState } from 'react'
 import { motion, useReducedMotion } from 'motion/react'
-import { ChevronDown, Settings2 } from 'lucide-react'
+import {
+  ChevronDown,
+  Settings2,
+  Sun,
+  Moon,
+  Volume2,
+  VolumeX,
+  PictureInPicture2,
+} from 'lucide-react'
 import './reveal-nav.css'
 
 const compactLabels = {
+  home: 'About',
+  contact: 'Contact',
+  faq: 'FAQs',
+  privacy: 'Privacy',
   assistant: 'Assistant',
   library: 'Library',
   routines: 'Routines',
@@ -11,8 +23,19 @@ const compactLabels = {
   settings: 'Settings',
 }
 
-export default function RevealNav({ view, onNavigate, navigation }) {
+export default function RevealNav({
+  view,
+  onNavigate,
+  navigation,
+  persistent = false,
+  theme,
+  onTheme,
+  sounds,
+  onSounds,
+  onFloat,
+}) {
   const [open, setOpen] = useState(false)
+  const expanded = open || persistent
   const reduced = useReducedMotion()
   const region = useRef(null)
   const trigger = useRef(null)
@@ -73,7 +96,7 @@ export default function RevealNav({ view, onNavigate, navigation }) {
   return (
     <div
       ref={region}
-      className={`reveal-nav-region${open ? ' is-open' : ''}`}
+      className={`reveal-nav-region${expanded ? ' is-open' : ''}${persistent ? ' public-nav' : ''}`}
       onPointerEnter={(event) => {
         if (event.pointerType !== 'touch') reveal()
       }}
@@ -94,47 +117,51 @@ export default function RevealNav({ view, onNavigate, navigation }) {
       }}
     >
       <div className="reveal-nav-edge" aria-hidden="true" />
-      <button
-        ref={trigger}
-        className="reveal-nav-trigger"
-        type="button"
-        aria-label={open ? 'Hide navigation' : 'Show navigation'}
-        aria-expanded={open}
-        aria-controls={panelId}
-        onClick={() => (open ? close() : reveal())}
-        onKeyDown={(event) => {
-          if (event.key === 'ArrowDown') {
-            event.preventDefault()
-            reveal()
-            requestAnimationFrame(() => region.current?.querySelector('.reveal-nav-item')?.focus())
-          }
-        }}
-        title="Navigation · move to the top edge or press Tab"
-      >
-        <span className="reveal-nav-handle" />
-        <ChevronDown size={10} aria-hidden="true" />
-      </button>
+      {!persistent && (
+        <button
+          ref={trigger}
+          className="reveal-nav-trigger"
+          type="button"
+          aria-label={open ? 'Hide navigation' : 'Show navigation'}
+          aria-expanded={open}
+          aria-controls={panelId}
+          onClick={() => (open ? close() : reveal())}
+          onKeyDown={(event) => {
+            if (event.key === 'ArrowDown') {
+              event.preventDefault()
+              reveal()
+              requestAnimationFrame(() =>
+                region.current?.querySelector('.reveal-nav-item')?.focus(),
+              )
+            }
+          }}
+          title="Navigation · move to the top edge or press Tab"
+        >
+          <span className="reveal-nav-handle" />
+          <ChevronDown size={10} aria-hidden="true" />
+        </button>
+      )}
       <motion.nav
         id={panelId}
         className="reveal-nav-panel"
         aria-label="Main navigation"
-        aria-hidden={!open}
-        inert={open ? undefined : ''}
+        aria-hidden={!expanded}
+        inert={expanded ? undefined : ''}
         initial={false}
         animate={{
-          opacity: open ? 1 : 0,
-          y: open ? 0 : reduced ? 0 : -24,
-          scale: open ? 1 : 0.985,
+          opacity: expanded ? 1 : 0,
+          y: expanded ? 0 : reduced ? 0 : -24,
+          scale: expanded ? 1 : 0.985,
         }}
         transition={reduced ? { duration: 0 } : { type: 'spring', stiffness: 390, damping: 32 }}
-        style={{ pointerEvents: open ? 'auto' : 'none' }}
+        style={{ pointerEvents: expanded ? 'auto' : 'none' }}
       >
         <button
           className="reveal-nav-brand"
           aria-label="APPLE home"
           title="APPLE home"
-          tabIndex={open ? 0 : -1}
-          onClick={() => navigate('assistant')}
+          tabIndex={expanded ? 0 : -1}
+          onClick={() => navigate('home')}
         >
           <svg viewBox="0 0 180 180" fill="currentColor" aria-hidden="true">
             <path d="M91 46C62 34 37 50 32 78C26 109 46 139 72 143C91 146 103 134 110 117C85 127 66 114 64 95C61 72 74 57 91 46Z" />
@@ -155,7 +182,7 @@ export default function RevealNav({ view, onNavigate, navigation }) {
               aria-label={label}
               aria-current={view === id ? 'page' : undefined}
               title={label}
-              tabIndex={open ? 0 : -1}
+              tabIndex={expanded ? 0 : -1}
               onClick={() => navigate(id)}
               whileHover={reduced ? undefined : { y: -1 }}
               whileTap={reduced ? undefined : { scale: 0.96 }}
@@ -166,6 +193,27 @@ export default function RevealNav({ view, onNavigate, navigation }) {
             </motion.button>
           ))}
         </div>
+        {persistent && (
+          <div className="reveal-nav-tools">
+            <button
+              className="icon-button"
+              aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
+              onClick={onTheme}
+            >
+              {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+            </button>
+            <button
+              className="icon-button"
+              aria-label={sounds ? 'Mute interface sounds' : 'Enable interface sounds'}
+              onClick={onSounds}
+            >
+              {sounds ? <Volume2 size={16} /> : <VolumeX size={16} />}
+            </button>
+            <button className="icon-button" aria-label="Float assistant" onClick={onFloat}>
+              <PictureInPicture2 size={16} />
+            </button>
+          </div>
+        )}
       </motion.nav>
     </div>
   )

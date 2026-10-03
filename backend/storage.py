@@ -48,6 +48,20 @@ def delete(kind, record_id):
         conn.execute('DELETE FROM records WHERE kind=? AND id=?', (kind, record_id))
 
 
+def delete_history(record_ids=None):
+    """Delete only activity records, atomically; never documents or contacts."""
+    with db() as conn:
+        if record_ids is None:
+            result = conn.execute('DELETE FROM records WHERE kind=?', ('history',))
+        elif record_ids:
+            placeholders = ','.join('?' for _ in record_ids)
+            result = conn.execute(f'DELETE FROM records WHERE kind=? AND id IN ({placeholders})',
+                                  ('history', *record_ids))
+        else:
+            return 0
+        return result.rowcount
+
+
 def settings():
     from models import Settings
     return Settings(**(get('settings', 'settings') or {}))

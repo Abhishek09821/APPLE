@@ -1,5 +1,14 @@
 import React, { useEffect, useState } from 'react'
-import { AudioLines, Check, ShieldCheck, Sparkles, Volume2 } from 'lucide-react'
+import {
+  AudioLines,
+  Check,
+  ShieldCheck,
+  Sparkles,
+  Volume2,
+  Sun,
+  Moon,
+  PictureInPicture2,
+} from 'lucide-react'
 import { api } from '../utils/api'
 import SavedContacts from './SavedContacts'
 
@@ -13,6 +22,8 @@ export default function SettingsView({
   toggleVoice,
   speechRate,
   setSpeechRate,
+  speechLanguage,
+  setSpeechLanguage,
   speak,
   working,
   doWork,
@@ -21,6 +32,11 @@ export default function SettingsView({
   setAutomation,
   autoTutor,
   setAutoTutor,
+  preferences,
+  onFloat,
+  floatingSupported,
+  expressiveVoice,
+  setExpressiveVoice,
 }) {
   const [permissions, setPermissions] = useState(null)
   useEffect(() => {
@@ -36,6 +52,75 @@ export default function SettingsView({
           Your assistant. Your way<span>.</span>
         </h1>
         <p>Connect your local intelligence and find your voice.</p>
+      </div>
+      <div className="settings-card">
+        <h3>Make it feel like you</h3>
+        <p className="field-hint">
+          Appearance and interface sound preferences save automatically in this browser.
+        </p>
+        <div className="preference-grid" role="group" aria-label="Appearance">
+          <button
+            className={`preference-choice ${preferences.theme === 'light' ? 'selected' : ''}`}
+            aria-pressed={preferences.theme === 'light'}
+            onClick={() => preferences.setTheme('light')}
+          >
+            <Sun size={22} />
+            Light
+          </button>
+          <button
+            className={`preference-choice ${preferences.theme === 'dark' ? 'selected' : ''}`}
+            aria-pressed={preferences.theme === 'dark'}
+            onClick={() => preferences.setTheme('dark')}
+          >
+            <Moon size={22} />
+            Dark
+          </button>
+        </div>
+        <div className="setting-row">
+          <div>
+            <strong>Interface sounds</strong>
+            <p>Soft feedback on clicks, controls and scrolling. Quiet during voice sessions.</p>
+          </div>
+          <button
+            className={`toggle ${preferences.sounds ? 'on' : ''}`}
+            role="switch"
+            aria-checked={preferences.sounds}
+            aria-label="Interface sounds"
+            onClick={() => preferences.setSounds(!preferences.sounds)}
+          >
+            <span />
+          </button>
+        </div>
+        <label>
+          Sound level <span>{Math.round(preferences.soundVolume * 100)}%</span>
+          <input
+            aria-label="Interface sound volume"
+            type="range"
+            min="0"
+            max="1"
+            step="0.05"
+            value={preferences.soundVolume}
+            onChange={(e) => preferences.setSoundVolume(Number(e.target.value))}
+          />
+        </label>
+        <div className="setting-row">
+          <div>
+            <strong>A companion above your other windows</strong>
+            <p>
+              {floatingSupported
+                ? 'Drag its title bar anywhere. Voice and replies stay in sync with this tab.'
+                : 'Open APPLE in desktop Chrome to use the floating companion.'}
+            </p>
+          </div>
+        </div>
+        <button className="secondary-button" disabled={!floatingSupported} onClick={onFloat}>
+          <PictureInPicture2 size={16} />
+          Float assistant
+        </button>
+        <p className="field-hint">
+          Keep this tab open. Closing the companion ends its voice session; Return to APPLE keeps it
+          going.
+        </p>
       </div>
       <div className="settings-card">
         <div className="settings-card-heading">
@@ -121,10 +206,45 @@ export default function SettingsView({
             onChange={(e) => setSpeechRate(Number(e.target.value))}
           />
         </label>
+        <div className="setting-row">
+          <div>
+            <strong>Conversational expression</strong>
+            <p>Natural, occasional “hmm” and “yeah” when they fit. Save settings to apply.</p>
+          </div>
+          <button
+            className={`toggle ${expressiveVoice ? 'on' : ''}`}
+            role="switch"
+            aria-checked={expressiveVoice}
+            aria-label="Conversational expression"
+            onClick={() => setExpressiveVoice(!expressiveVoice)}
+          >
+            <span />
+          </button>
+        </div>
+        <label>
+          Spoken language
+          <select
+            aria-label="Spoken language"
+            value={speechLanguage}
+            onChange={(e) => setSpeechLanguage(e.target.value)}
+          >
+            <option value="en-IN">English (India)</option>
+            <option value="hi-IN">Hindi (India)</option>
+            <option value="en-US">English (US)</option>
+            <option value="en-GB">English (UK)</option>
+          </select>
+        </label>
+        <p className="field-hint">
+          Choose the language you speak most. This setting saves automatically.
+        </p>
         <button
           className="secondary-button"
           onClick={() =>
-            speak('Hello. I’m Apple, your personal assistant. What shall we do today?')
+            speak(
+              expressiveVoice
+                ? 'Hmm… yeah, I can help with that. I’m Apple. What shall we do today?'
+                : 'Hello. I’m Apple, your personal assistant. What shall we do today?',
+            )
           }
         >
           <Volume2 size={15} />
@@ -133,8 +253,8 @@ export default function SettingsView({
         <p className="field-hint">
           Microphone dictation uses your browser’s speech service and may send audio to its
           provider. Start a voice session to submit speech automatically, hear replies, and continue
-          hands-free. Chrome is recommended. Speak during a reply to interrupt it; headphones help
-          prevent speaker echo from being mistaken for your voice.
+          hands-free. With speaker echo cancellation available, speak during a reply to interrupt.
+          Otherwise, APPLE listens between replies and offers an Interrupt button.
         </p>
       </div>
       <div className="settings-card">
@@ -268,6 +388,7 @@ export default function SettingsView({
                 model: model.trim(),
                 voice,
                 speech_rate: speechRate,
+                expressive_voice: expressiveVoice,
                 automation_enabled: automation,
                 setup_completed: true,
                 auto_tutor: autoTutor,

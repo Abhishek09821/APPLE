@@ -82,7 +82,7 @@ export function useVoiceTutor({ speak, cancelSpeech, onStart, onError }) {
         )
         if (epoch.current !== token) return
         if (value.index + 1 < value.quiz.questions.length) {
-          await ask({ ...next, index: value.index + 1, response: '' }, token)
+          await ask({ ...next, index: value.index + 1, response: '', feedback: null }, token)
         } else {
           const points = Object.values(answers).reduce((sum, answer) => sum + answer.score, 0)
           update({ ...next, stage: 'complete', points })

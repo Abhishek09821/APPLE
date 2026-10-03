@@ -1,6 +1,9 @@
 // Static native Accessibility bridge. All user text arrives as JSON argv data.
 // Each invocation is bounded and cancellable by its parent subprocess.
 ObjC.import('ApplicationServices');
+ObjC.import('Foundation');
+// Pass UTF-16 buffers as raw pointers; this avoids JXA's CF pointer coercion.
+ObjC.bindFunction('CGEventKeyboardSetUnicodeString', ['void', ['void *', 'unsigned long', 'void *']]);
 
 function run(argv) {
   const pid = Number(argv[0]);
@@ -74,6 +77,59 @@ function run(argv) {
       same(scalar(headers[0], k)) || (request.expected_name && norm(scalar(headers[0], k)) === norm(request.expected_name))))
       throw Error('The WhatsApp recipient changed. No message was sent.');
   }
+  function typeComposer(root, node) {
+    if (/[\x00-\x1f\x7f\u2028\u2029]/.test(request.value))
+      throw Error('Use a single-line WhatsApp message. Line breaks are not submitted through native keyboard automation.');
+    if ($.AXUIElementSetAttributeValue(node, $('AXFocused'), $(true)))
+      throw Error('WhatsApp could not focus the verified message field. No message was sent.');
+    const recipient = header(root)[0];
+    const recipientLabels = ['AXTitle', 'AXDescription', 'AXValue'].map(k => scalar(recipient, k));
+    function ready() {
+      check();
+      const focused = attr(app, 'AXFocusedUIElement');
+      if (!focused || scalar(focused, 'AXIdentifier') !== 'ChatBar_ComposerTextView' || scalar(app, 'AXFrontmost') === false)
+        throw Error('WhatsApp’s message focus changed. No message was sent.');
+      if (scalar(recipient, 'AXVisible') === false || ['AXTitle', 'AXDescription', 'AXValue'].some((k, i) => scalar(recipient, k) !== recipientLabels[i]))
+        throw Error('The WhatsApp recipient changed. No message was sent.');
+    }
+    function key(code, flags, value) {
+      ready();
+      for (const down of [true, false]) {
+        const event = $.CGEventCreateKeyboardEvent(null, code, down);
+        $.CGEventSetFlags(event, flags);
+        if (value !== undefined) {
+          const bytes = $(value).dataUsingEncoding($.NSUTF16LittleEndianStringEncoding);
+          $.CGEventKeyboardSetUnicodeString(event, value.length, bytes.bytes);
+        }
+        // Events go only to this verified WhatsApp process, never another app.
+        $.CGEventPostToPid(pid, event);
+      }
+    }
+    ready();
+    const initial = scalar(node, 'AXValue');
+    // Focusing can discard the old AXValue-only ghost draft. An explicit retry
+    // of exactly that message may rebuild it; any different draft remains intact.
+    if (initial !== request.node.value && !(initial === '' && request.node.value === request.value))
+      throw Error('The WhatsApp draft changed. No message was sent.');
+    if (initial) {
+      key(0, 1048576); // Command+A, exclusively inside the verified composer.
+      key(51, 0);     // Delete selected text; never Return/Enter.
+      delay(.04);
+    }
+    if (scalar(node, 'AXValue') !== '') throw Error('The WhatsApp draft changed while preparing text. No message was sent.');
+    // Keep surrogate pairs intact and events short enough for AppKit text input.
+    let chunk = '';
+    for (const character of request.value) {
+      if (chunk.length + character.length > 16) { key(0, 0, chunk); chunk = ''; }
+      chunk += character;
+    }
+    if (chunk) key(0, 0, chunk);
+    for (let attempt = 0; attempt < 8; attempt++) {
+      delay(.04); ready();
+      if (scalar(node, 'AXValue') === request.value) return;
+    }
+    throw Error('WhatsApp did not retain the exact message text. Check the draft; nothing was sent.');
+  }
   function resolve(root, target) {
     const parts = String(target.handle).split('.').map(Number);
     if (parts.shift() !== 0 || parts.some(n => !Number.isInteger(n) || n < 0)) throw Error('Invalid WhatsApp control.');
@@ -134,7 +190,11 @@ function run(argv) {
   if (request.operation === 'snapshot') return JSON.stringify(visit(root, '0', 0));
   verifyRecipient(root);
   const node = resolve(root, request.node);
-  if (request.operation === 'set_value') {
+  if (request.operation === 'type_composer') {
+    if (scalar(node, 'AXIdentifier') !== 'ChatBar_ComposerTextView') throw Error('The selected field is not WhatsApp’s message composer.');
+    if (scalar(node, 'AXValue') !== request.node.value) throw Error('The WhatsApp draft changed. No message was sent.');
+    typeComposer(root, node);
+  } else if (request.operation === 'set_value') {
     if (scalar(node, 'AXValue') !== request.node.value) throw Error('The WhatsApp draft changed. No message was sent.');
     const identifier = scalar(node, 'AXIdentifier');
     if (identifier === 'TokenizedSearchBar_TextView' || identifier === 'PickerView_SearchBar') {
@@ -157,6 +217,8 @@ function run(argv) {
       delay(0.1);
       requireSearchFocus();
       events.keystroke(request.value);
+    } else if (identifier === 'ChatBar_ComposerTextView') {
+      throw Error('The message composer requires native text input, not an Accessibility value assignment.');
     } else if ($.AXUIElementSetAttributeValue(node, $('AXValue'), $(request.value))) {
       throw Error('WhatsApp did not accept text in its message field. No message was sent.');
     }

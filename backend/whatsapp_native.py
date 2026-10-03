@@ -19,6 +19,10 @@ ACCESSIBILITY_HELP = (
 )
 
 
+class SendControlUnavailable(ValueError):
+    """The composer may still be updating its native Send/voice controls."""
+
+
 def normalise(value):
     text = ''.join(c for c in str(value or '') if unicodedata.category(c) != 'Cf')
     return ' '.join(unicodedata.normalize('NFKC', text).casefold().split())
@@ -200,7 +204,22 @@ def send_button(tree, composer):
                       and (n.identifier == 'ChatBar_SendButton' or any(v in {'send', 'send message'} for v in n.labels()))]
         if candidates:
             return unique(candidates, 'WhatsApp’s Send button is ambiguous. The message remains a draft.')
-    raise ValueError('WhatsApp’s Send button could not be verified. The message remains a draft.')
+    raise SendControlUnavailable('WhatsApp’s Send button could not be verified. The message remains a draft.')
+
+
+async def ready_to_send(ax, contact, message, expected_name=''):
+    """Wait for a visible Send control while continuously rechecking the draft."""
+    for attempt in range(6):
+        tree = await ax.snapshot()
+        composer = verified_recipient(tree, contact, expected_name)
+        if composer.value != message:
+            raise ValueError('WhatsApp’s draft does not match the approved message. Check the draft; nothing was sent.')
+        try:
+            return send_button(tree, composer)
+        except SendControlUnavailable:
+            if attempt == 5:
+                raise
+            await asyncio.sleep(.06)
 
 
 def outgoing_messages(tree, message):
@@ -262,7 +281,8 @@ class NativeAX:
         return {key: getattr(node, key) for key in ('handle', 'role', 'identifier', 'title', 'description', 'value')}
 
     async def set_value(self, node, value):
-        await self.call('set_value', node=self.data(node), value=value,
+        operation = 'type_composer' if node.identifier == 'ChatBar_ComposerTextView' else 'set_value'
+        await self.call(operation, node=self.data(node), value=value,
                         contact=self.contact if node.identifier == 'ChatBar_ComposerTextView' else '',
                         expected_name=self.expected_name if node.identifier == 'ChatBar_ComposerTextView' else '')
 
@@ -272,6 +292,8 @@ class NativeAX:
 
 
 async def native_chat(ax, contact, message, send, *, phone=False, expected_name=''):
+    if send and any(ord(c) < 32 or c in '\x7f\u2028\u2029' for c in message):
+        raise ValueError('Use a single-line WhatsApp message. No message was sent.')
     if not phone:
         using_picker = hasattr(ax, 'show_contacts')
         if using_picker:
@@ -308,27 +330,19 @@ async def native_chat(ax, contact, message, send, *, phone=False, expected_name=
             await asyncio.sleep(.2)
     if not send:
         return {'message': f'Opened {expected_name or contact} in the WhatsApp app.'}
-    if composer.value.strip():
+    if composer.value and composer.value != message:
         raise ValueError('This WhatsApp chat already has a draft. Clear or send it in WhatsApp before trying again. No message was sent.')
     before = outgoing_messages(tree, message)
     # Recheck recipient and draft immediately before modifying the selected field.
     composer = verified_recipient(await ax.snapshot(), contact, expected_name)
-    if composer.value.strip():
+    if composer.value and composer.value != message:
         raise ValueError('A WhatsApp draft appeared. I left it untouched. No message was sent.')
     await ax.set_value(composer, message)
-    await asyncio.sleep(0.1)
-    tree = await ax.snapshot()
-    composer = verified_recipient(tree, contact, expected_name)
-    if composer.value != message:
-        raise ValueError('WhatsApp’s draft does not match the approved message. Check the draft; nothing was sent.')
-    send_button(tree, composer)
+    await ready_to_send(ax, contact, message, expected_name)
     # Yield before the single irreversible action so Stop can cancel it.
     await asyncio.sleep(0)
-    current_tree = await ax.snapshot()
-    current = verified_recipient(current_tree, contact, expected_name)
-    if current.value != message:
-        raise ValueError('The WhatsApp draft changed. Nothing was sent.')
-    await ax.press(send_button(current_tree, current), draft=message)
+    button = await ready_to_send(ax, contact, message, expected_name)
+    await ax.press(button, draft=message)
     for _ in range(10):
         await asyncio.sleep(0.25)
         try:

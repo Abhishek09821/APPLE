@@ -10,6 +10,8 @@ from unittest.mock import AsyncMock, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from desktop_apps import InstalledApp, installed_apps, resolve_app, open_installed
 from desktop_automation import select_control, safe_control, public_controls, permissions_status
+import desktop_automation
+from models import Action
 
 
 class DesktopAutomationTests(unittest.TestCase):
@@ -73,6 +75,73 @@ class DesktopAutomationTests(unittest.TestCase):
         self.assertFalse(result['accessibility'])
         request = json.loads(process.call_args.args[-1])
         self.assertEqual(request, {'operation': 'permissions'})
+
+    def test_symbol_controls_and_real_button_suffix_labels_are_preserved(self):
+        controls = [{'handle': '0.1', 'role': 'AXButton', 'title': '+', 'identifier': ''},
+                    {'handle': '0.2', 'role': 'AXButton', 'title': 'Action button', 'identifier': ''},
+                    {'handle': '0.3', 'role': 'AXButton', 'title': 'Action', 'identifier': ''}]
+        self.assertEqual(select_control(controls, '+', {'AXButton'})['handle'], '0.1')
+        self.assertEqual(select_control(controls, 'Action button', {'AXButton'})['handle'], '0.2')
+        self.assertEqual(select_control(controls, 'the + button', {'AXButton'})['handle'], '0.1')
+
+    def test_value_only_display_is_available_to_inspection(self):
+        controls = public_controls({'controls': [{'role': 'AXStaticText', 'value': '4', 'enabled': True}]})
+        self.assertEqual(controls[0]['label'], '4')
+        self.assertEqual(controls[0]['value'], '4')
+
+
+class DesktopActionTests(unittest.IsolatedAsyncioTestCase):
+    async def test_calculator_plus_alias_uses_observed_add_control_and_returns_display(self):
+        app = InstalledApp('Calculator', '/System/Applications/Calculator.app', 'com.apple.calculator')
+        button = {'handle': '0.1', 'role': 'AXButton', 'title': 'Add', 'identifier': 'Add', 'value': ''}
+        before = {'controls': [button, {'role': 'AXStaticText', 'value': '2'}]}
+        after = {'controls': [button, {'role': 'AXStaticText', 'value': '2 +'}]}
+        bridge = AsyncMock(side_effect=[before, {}, after])
+        with patch.object(desktop_automation, 'open_installed', AsyncMock(return_value=app)), \
+             patch.object(desktop_automation, 'call_bridge', bridge), \
+             patch.object(desktop_automation.asyncio, 'sleep', AsyncMock()):
+            result = await desktop_automation.desktop_action(Action(action='click_control', target='Calculator', control='the plus button'), AsyncMock())
+        self.assertEqual(bridge.await_args_list[1].kwargs['node'], button)
+        self.assertTrue(result['visible_change'])
+        self.assertIn('2 +', [control['value'] for control in result['controls']])
+
+    async def test_search_uses_guarded_text_events_and_observes_results(self):
+        app = InstalledApp('Finder', '/System/Library/CoreServices/Finder.app', 'com.apple.finder')
+        field = {'handle': '0.1', 'role': 'AXTextField', 'subrole': 'AXSearchField', 'title': '', 'identifier': '_NS:122', 'value': ''}
+        before = {'controls': [field, {'role': 'AXStaticText', 'value': '12 items'}]}
+        after = {'controls': [{**field, 'value': 'needle'}, {'role': 'AXStaticText', 'value': '0 items'}]}
+        bridge = AsyncMock(side_effect=[before, {}, before, {}, after])
+        with patch.object(desktop_automation, 'open_installed', AsyncMock(return_value=app)), \
+             patch.object(desktop_automation, 'call_bridge', bridge), \
+             patch.object(desktop_automation.asyncio, 'sleep', AsyncMock()):
+            result = await desktop_automation.desktop_action(Action(action='search_app', target='Finder', message='needle'), AsyncMock())
+        self.assertEqual(bridge.await_args_list[3].args[1], 'type_value')
+        self.assertEqual(bridge.await_args_list[3].kwargs['value'], 'needle')
+        self.assertIn('0 items', [control['value'] for control in result['controls']])
+
+    async def test_search_field_echo_alone_is_not_reported_as_results(self):
+        app = InstalledApp('Finder', '/System/Library/CoreServices/Finder.app', 'com.apple.finder')
+        before = {'controls': [{'role': 'AXTextField', 'title': 'Search', 'value': ''}]}
+        after = {'controls': [{'role': 'AXTextField', 'title': 'Search', 'value': 'needle'}]}
+        with patch.object(desktop_automation, 'call_bridge', AsyncMock(return_value=after)), \
+             patch.object(desktop_automation.asyncio, 'sleep', AsyncMock()):
+            with self.assertRaisesRegex(ValueError, 'could not verify updated results'):
+                await desktop_automation._wait_search_results(AsyncMock(), app, before, 'needle')
+
+    async def test_unrelated_result_change_with_a_different_query_is_not_verified(self):
+        app = InstalledApp('Finder', '/System/Library/CoreServices/Finder.app', 'com.apple.finder')
+        before = {'controls': [{'role': 'AXTextField', 'subrole': 'AXSearchField', 'value': ''}]}
+        after = {'controls': [{'role': 'AXTextField', 'subrole': 'AXSearchField', 'value': 'another query'},
+                              {'role': 'AXStaticText', 'value': '0 items'}]}
+        with patch.object(desktop_automation, 'call_bridge', AsyncMock(return_value=after)), \
+             patch.object(desktop_automation.asyncio, 'sleep', AsyncMock()):
+            with self.assertRaisesRegex(ValueError, 'could not verify updated results'):
+                await desktop_automation._wait_search_results(AsyncMock(), app, before, 'needle')
+
+    async def test_unsupported_chrome_web_app_reports_the_actual_adapter_limit(self):
+        with patch.object(desktop_automation, 'call_bridge', AsyncMock(side_effect=RuntimeError('The app’s visible control tree is too large.'))):
+            with self.assertRaisesRegex(ValueError, 'runs inside Chrome'):
+                await desktop_automation._inspect_ready(AsyncMock(), 'com.google.Chrome.app.example')
 
 
 if __name__ == '__main__':

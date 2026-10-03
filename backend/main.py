@@ -6,6 +6,7 @@ import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from uuid import uuid4
+from urllib.parse import quote
 from fastapi import FastAPI, HTTPException, UploadFile, File, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
@@ -15,8 +16,8 @@ from pydantic import BaseModel, Field
 from models import CommandRequest, Settings, Routine, Plan
 from ai_parser import parse_command, model_status, ModelUnavailable
 from executor import execute_action, REVIEW_ACTIONS, close_browser
-from storage import put, get, list_records, delete, settings
-from knowledge import ingest, answer, make_quiz, public_quiz, grade_answer, cancel_study_tasks, MAX_BYTES
+from storage import put, get, list_records, delete, settings, delete_history
+from knowledge import ingest, answer, make_quiz, public_quiz, grade_answer, cancel_study_tasks, quiz_cache_id, MAX_BYTES
 from speech import spoken_text, spoken_result, render_audio, cancel_synthesis
 from memory import save_fact
 from desktop_automation import permissions_status
@@ -42,7 +43,7 @@ async def lifespan(app):
 
 
 app = FastAPI(title='APPLE · Local desktop assistant', version='2.0.0', lifespan=lifespan)
-app.add_middleware(CORSMiddleware, allow_origins=list(ALLOWED_ORIGINS), allow_methods=['GET', 'POST', 'PUT', 'DELETE'], allow_headers=['Content-Type', 'X-Apple-Token'])
+app.add_middleware(CORSMiddleware, allow_origins=list(ALLOWED_ORIGINS), allow_methods=['GET', 'POST', 'PUT', 'DELETE'], allow_headers=['Content-Type', 'X-Apple-Token'], expose_headers=['X-Apple-Spoken-Text'])
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=['localhost', '127.0.0.1', 'testserver'])
 
 
@@ -270,6 +271,25 @@ async def history():
     return list_records('history')
 
 
+class HistorySelection(BaseModel):
+    ids: list[str] = Field(min_length=1, max_length=1000)
+
+
+@app.post('/api/history/delete')
+async def remove_selected_history(value: HistorySelection):
+    return {'deleted': delete_history(list(set(value.ids)))}
+
+
+@app.delete('/api/history')
+async def clear_history():
+    return {'deleted': delete_history()}
+
+
+@app.delete('/api/history/{record_id}')
+async def remove_history(record_id: str):
+    return {'deleted': delete_history([record_id])}
+
+
 @app.get('/api/documents')
 async def documents():
     return [{k: v for k, v in d.items() if k != 'chunks'} for d in list_records('document')]
@@ -301,12 +321,31 @@ async def import_path(value: ImportPath):
 @app.delete('/api/documents/{document_id}')
 async def remove_document(document_id: str):
     delete('document', document_id)
+    delete('quiz_template', quiz_cache_id(document_id))
     return {'deleted': True}
 
 
 @app.post('/api/documents/{document_id}/quiz')
-async def quiz(document_id: str):
-    return public_quiz(await make_quiz(document_id))
+async def quiz(document_id: str, request: Request):
+    return public_quiz(await study_request(request, make_quiz(document_id)))
+
+
+async def study_request(request, work):
+    """Release local model work when End lesson/navigation aborts the request."""
+    task = asyncio.create_task(work)
+    try:
+        while True:
+            done, _ = await asyncio.wait({task}, timeout=.1)
+            if done:
+                if task.cancelled():
+                    raise HTTPException(status_code=499, detail='Study session stopped.')
+                return task.result()
+            if await request.is_disconnected():
+                raise HTTPException(status_code=499, detail='Study session closed.')
+    finally:
+        if not task.done():
+            task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
 
 
 class AnswerRequest(BaseModel):
@@ -315,8 +354,8 @@ class AnswerRequest(BaseModel):
 
 
 @app.post('/api/quizzes/{quiz_id}/answer')
-async def submit_answer(quiz_id: str, value: AnswerRequest):
-    return await grade_answer(quiz_id, value.question_id, value.answer)
+async def submit_answer(quiz_id: str, value: AnswerRequest, request: Request):
+    return await study_request(request, grade_answer(quiz_id, value.question_id, value.answer))
 
 
 @app.get('/api/routines')
@@ -360,7 +399,7 @@ async def speech_audio(value: Speech):
         raise ValueError('Local speech requires macOS.')
     data = await render_audio(value.text, settings().speech_rate)
     return Response(content=data, media_type='audio/wav', status_code=200 if data else 204,
-                    headers={'Cache-Control': 'no-store'})
+                    headers={'Cache-Control': 'no-store', 'X-Apple-Spoken-Text': quote(spoken_text(value.text), safe='')})
 
 
 @app.post('/api/speech')

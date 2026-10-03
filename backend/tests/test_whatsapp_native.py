@@ -1,5 +1,6 @@
 """Recipient/draft/send boundary tests. Never controls or sends to a real chat."""
 import asyncio
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -126,6 +127,20 @@ class NativeWhatsAppTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(ax.draft, 'My unfinished message')
         self.assertFalse(ax.sent)
 
+    async def test_explicit_retry_retypes_only_an_exact_matching_draft_and_sends_once(self):
+        ax = FakeAX(draft='Hi!')
+        result = await native.native_chat(ax, 'Rahul', 'Hi!', True)
+        self.assertIn('outgoing message', result['message'])
+        self.assertEqual([value for handle, value in ax.writes if handle == 9], ['Hi!'])
+        self.assertEqual(ax.presses.count(10), 1)
+
+    async def test_matching_draft_does_not_allow_send_to_changed_recipient(self):
+        ax = FakeAX(draft='Hi!', contact='Someone Else')
+        with self.assertRaisesRegex(ValueError, 'recipient'):
+            await native.native_chat(ax, '+919876543210', 'Hi!', True, phone=True, expected_name='Rahul')
+        self.assertEqual(ax.writes, [])
+        self.assertFalse(ax.sent)
+
     async def test_recipient_change_after_typing_prevents_send(self):
         ax = FakeAX(switch_on_type=True)
         with self.assertRaisesRegex(ValueError, 'selected WhatsApp recipient'):
@@ -139,6 +154,104 @@ class NativeWhatsAppTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(ax.presses.count(10), 1)
         self.assertIn('outgoing message', result['message'])
         self.assertIn('not yet verified', result['message'])
+
+    async def test_send_waits_for_editor_to_expose_visible_send_control(self):
+        class DelayedEditor(FakeAX):
+            missing_frames = 2
+
+            async def snapshot(self):
+                tree = await super().snapshot()
+                if self.draft and self.missing_frames:
+                    self.missing_frames -= 1
+                    pane = next(n for n in tree.walk() if n.handle == 7)
+                    pane.children = [n for n in pane.children if n.handle != 10]
+                return tree
+
+        ax = DelayedEditor()
+        result = await native.native_chat(ax, 'Rahul', 'Hi!', True)
+        self.assertIn('outgoing message', result['message'])
+        self.assertEqual(ax.presses.count(10), 1)
+
+    async def test_accessible_draft_without_real_send_control_is_never_submitted(self):
+        class UnacceptedEditor(FakeAX):
+            async def snapshot(self):
+                tree = await super().snapshot()
+                pane = next(n for n in tree.walk() if n.handle == 7)
+                pane.children = [n for n in pane.children if n.handle != 10]
+                return tree
+
+        ax = UnacceptedEditor()
+        with self.assertRaises(native.SendControlUnavailable):
+            await native.native_chat(ax, 'Rahul', 'Hi!', True)
+        self.assertEqual(ax.draft, 'Hi!')
+        self.assertFalse(ax.sent)
+
+    async def test_native_bridge_sends_only_after_real_text_input_updates_editor(self):
+        # WhatsApp's actual regression: AXValue changes the accessible text but
+        # does not switch its editor from Voice Message to Send.
+        state = {'text': '', 'input_accepted': False, 'sent': False, 'send_presses': 0}
+
+        def encode(node):
+            result = {key: getattr(node, key) for key in ('handle', 'role', 'title', 'description', 'value', 'placeholder', 'identifier', 'enabled')}
+            result['children'] = [encode(child) for child in node.children]
+            return result
+
+        async def process(*args, **kwargs):
+            request = json.loads(args[-1])
+            if request['operation'] == 'snapshot':
+                tree = ui(draft=state['text'], outgoing=state['sent'])
+                next(n for n in tree.walk() if n.handle == 8).identifier = 'NavigationBar_HeaderViewButton'
+                next(n for n in tree.walk() if n.handle == 9).identifier = 'ChatBar_ComposerTextView'
+                next(n for n in tree.walk() if n.handle == 10).identifier = 'ChatBar_SendButton'
+                if not state['input_accepted']:
+                    pane = next(n for n in tree.walk() if n.handle == 7)
+                    pane.children = [n for n in pane.children if n.handle != 10]
+                return json.dumps(encode(tree))
+            if request['operation'] == 'type_composer':
+                state['text'] = request['value']
+                state['input_accepted'] = bool(request['value'])
+            elif request['operation'] == 'set_value':
+                state['text'] = request['value']
+            elif request['operation'] == 'press':
+                self.assertTrue(state['input_accepted'])
+                self.assertEqual(request['draft'], state['text'])
+                state.update(text='', sent=True, send_presses=state['send_presses'] + 1)
+            else:
+                self.fail('Unexpected native operation')
+            return '{}'
+
+        ax = native.NativeAX(123, process)
+        ax.contact, ax.expected_name = '+919876543210', 'Rahul'
+        result = await native.native_chat(ax, ax.contact, 'Hi!', True, phone=True, expected_name='Rahul')
+        self.assertIn('outgoing message', result['message'])
+        self.assertEqual(state['send_presses'], 1)
+
+    async def test_recipient_changes_while_send_control_is_rendering(self):
+        class ChangingRecipient(FakeAX):
+            after_typing = 0
+
+            async def snapshot(self):
+                if self.draft:
+                    self.after_typing += 1
+                    if self.after_typing > 1:
+                        self.contact = 'Different Person'
+                tree = await super().snapshot()
+                pane = next(n for n in tree.walk() if n.handle == 7)
+                pane.children = [n for n in pane.children if n.handle != 10]
+                return tree
+
+        ax = ChangingRecipient()
+        with self.assertRaisesRegex(ValueError, 'recipient'):
+            await native.native_chat(ax, 'Rahul', 'Hi!', True)
+        self.assertFalse(ax.sent)
+
+    async def test_control_characters_never_become_submit_keystrokes(self):
+        for text in ('Hello\nMom', 'Hello\rMom', 'Hello\tMom', 'Hello\u2028Mom', 'Hello\u2029Mom'):
+            ax = FakeAX()
+            with self.assertRaisesRegex(ValueError, 'single-line'):
+                await native.native_chat(ax, 'Rahul', text, True)
+            self.assertEqual(ax.writes, [])
+            self.assertEqual(ax.presses, [])
 
     async def test_cleared_composer_alone_does_not_report_success_or_retry(self):
         ax = FakeAX(confirmed=False)

@@ -8,6 +8,7 @@ import math
 import struct
 import tempfile
 import wave
+from urllib.parse import quote
 from pathlib import Path
 from playwright.async_api import async_playwright
 
@@ -15,7 +16,7 @@ MOCK_RECOGNITION = '''
 window.voiceInstances = [];
 window.SpeechRecognition = class {
   constructor() { window.voiceInstances.push(this); }
-  start() { this.active = true; this.onstart?.(); }
+  start(track) { this.track = track; this.active = true; this.onstart?.(); }
   abort() { this.active = false; this.onend?.(); }
   interim(text) { const r = [{transcript: text}]; r.isFinal = false; this.onresult?.({results: [r]}); }
   finish(text) {
@@ -35,7 +36,7 @@ def pcm(duration=3, interrupted=False):
             if not interrupted or i / 22050 < .9 or i / 22050 > 1.7 else 0) for i in range(int(22050 * duration))))
     return buffer.getvalue()
 
-async def main():
+async def main(duplex=False):
     with tempfile.TemporaryDirectory(prefix='apple-voice-test-') as tmp:
         microphone = Path(tmp) / 'microphone.wav'
         microphone.write_bytes(pcm())
@@ -44,8 +45,17 @@ async def main():
                 '--use-fake-device-for-media-stream', f'--use-file-for-fake-audio-capture={microphone}', '--mute-audio'])
             page = await browser.new_page(viewport={'width':1440, 'height':960})
             await page.add_init_script(MOCK_RECOGNITION)
+            # Exercise both browser capability branches. PCM capture is real;
+            # acoustic cancellation itself cannot be measured with fake audio.
+            await page.add_init_script('''
+              const original = MediaStreamTrack.prototype.getSettings;
+              MediaStreamTrack.prototype.getSettings = function() {
+                return {...original.call(this), echoCancellation: %s};
+              };
+            ''' % ('"all"' if duplex else 'true'))
             errors, commands, speeches, answers = [], [], [], []
             docs = []
+            attempts = []
             doc = {'id':'voice-doc','name':'Voice lesson.txt','pages':1,'characters':150}
             quiz = {'id':'voice-quiz','name':doc['name'],'answers':{},'questions':[
                 {'id':'q1','question':'What gives plants energy?','page':1},
@@ -61,7 +71,11 @@ async def main():
                 if path == '/documents':
                     if route.request.method == 'POST': docs.append(doc); return await route.fulfill(json=doc)
                     return await route.fulfill(json=docs)
-                if path == '/documents/voice-doc/quiz': return await route.fulfill(json=quiz)
+                if path == '/documents/voice-doc/quiz':
+                    attempts.append(True)
+                    if not duplex and len(attempts) == 1:
+                        return await route.fulfill(status=400, json={'detail':'The model supplied unsupported source evidence. Please generate the quiz again.'})
+                    return await route.fulfill(json=quiz)
                 if path == '/quizzes/voice-quiz/answer':
                     answer = route.request.post_data_json; answers.append(answer)
                     done = answer['question_id'] == 'q2'
@@ -75,32 +89,52 @@ async def main():
                     return await route.fulfill(content_type='text/event-stream', body=''.join('data: '+json.dumps(e)+'\n\n' for e in events))
                 if path == '/speech/audio':
                     speeches.append(route.request.post_data_json['text'])
-                    return await route.fulfill(content_type='audio/wav', body=pcm(.55 if docs else 3, interrupted=not docs))
+                    return await route.fulfill(content_type='audio/wav',
+                        headers={'X-Apple-Spoken-Text': quote(speeches[-1] + ' The details are on screen.')},
+                        body=pcm(.55 if docs else 4, interrupted=not docs))
                 if path in ['/stop','/speech/stop']: return await route.fulfill(json={'stopped':True})
                 await route.fulfill(status=404, json={'detail':'Unexpected test request '+path})
 
             await page.route('**/api/**', routes)
-            await page.goto('http://127.0.0.1:8000')
+            await page.goto('http://127.0.0.1:8000/#assistant')
             await page.get_by_role('button', name='Start listening', exact=True).click()
+            await page.wait_for_function(ACTIVE)
+            assert await page.evaluate("window.voiceInstances.at(-1).track instanceof MediaStreamTrack")
+            assert await page.evaluate("window.voiceInstances.at(-1).lang") == 'en-IN'
+            track_id = await page.evaluate("window.voiceInstances.at(-1).track.id")
             await page.wait_for_function(SIGNAL + ' > .15')
             await page.evaluate("window.voiceInstances.at(-1).finish('Hello APPLE')")
             await page.locator('[data-voice-state="speaking"]').wait_for()
-            await page.wait_for_function(ACTIVE)
+            if duplex:
+                await page.wait_for_function(ACTIVE)
+            else:
+                assert not await page.evaluate(ACTIVE), 'No recognizer may hear playback when full AEC is unavailable'
             # Real PCM silence must settle even though the mic remains active.
             await page.wait_for_function(SIGNAL + ' < .02 && !!document.querySelector(\'[data-voice-state="speaking"]\')')
             await page.wait_for_function(SIGNAL + ' > .15 && !!document.querySelector(\'[data-voice-state="speaking"]\')')
-            await page.evaluate("window.voiceInstances.at(-1).interim('Hello from the voice test')")
-            assert await page.locator('[data-voice-state="speaking"]').count()
-            await page.evaluate("window.voiceInstances.at(-1).interim('Actually explain gravity')")
+            if duplex:
+                await page.evaluate("window.voiceInstances.at(-1).interim('Hello from the voice test')")
+                await page.evaluate("window.voiceInstances.at(-1).interim('The details are on screen')")
+                assert await page.locator('[data-voice-state="speaking"]').count()
+                await page.evaluate("window.voiceInstances.at(-1).interim('Actually explain gravity')")
+            else:
+                await page.get_by_role('button', name='Interrupt', exact=True).click()
             await page.locator('[data-voice-state="speaking"]').wait_for(state='hidden')
-            assert await page.evaluate(ACTIVE)
+            await page.wait_for_function(ACTIVE)
+            assert await page.evaluate("window.voiceInstances.at(-1).track.id") == track_id
             await page.evaluate("window.voiceInstances.at(-1).finish('Actually explain gravity')")
             await page.wait_for_function('!!document.querySelector(\'[data-voice-state="speaking"]\')')
             assert [c['command'] for c in commands] == ['Hello APPLE','Actually explain gravity']
             await page.wait_for_function(ACTIVE)
+            if not duplex:
+                # Delayed STT callback after the old 650 ms guard would have expired.
+                await page.evaluate("window.voiceInstances.at(-1).finish('Hello from the voice test')")
+                await page.wait_for_function(ACTIVE)
+                assert len(commands) == 2
             await page.evaluate("window.voiceInstances.at(-1).finish('stop listening')")
             await page.get_by_role('button', name='Start listening', exact=True).wait_for()
             assert not await page.evaluate(ACTIVE)
+            assert await page.evaluate("window.voiceInstances.every(r => !r.track || r.track.readyState === 'ended')")
 
             # Navigation really starts hidden and is reachable by keyboard and hover.
             await page.keyboard.press('Tab')
@@ -109,10 +143,18 @@ async def main():
             await page.locator('input[type=file]').set_input_files({'name':doc['name'],'mimeType':'text/plain',
                 'buffer':b'Plants use sunlight for energy. Gravity pulls objects toward Earth.'})
             lesson = page.get_by_role('region', name='Voice lesson')
+            if not duplex:
+                await lesson.get_by_role('button', name='Try lesson again').click()
             await lesson.get_by_role('heading', name='What gives plants energy?').wait_for()
+            assert not await page.get_by_role('alert').filter(has_text='unsupported source evidence').count()
+            await page.set_viewport_size({'width':440, 'height':956})
+            assert await page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+            await page.screenshot(path='/tmp/apple-document-lesson.png', full_page=True)
+            await page.set_viewport_size({'width':1440, 'height':960})
             await page.wait_for_function(ACTIVE)
             await page.evaluate("window.voiceInstances.at(-1).finish('Sunlight')")
             await lesson.get_by_role('heading', name='What pulls objects toward Earth?').wait_for()
+            assert not await lesson.locator('.tutor-feedback').count(), 'Previous grading must not appear under the next question'
             await page.wait_for_function(ACTIVE)
             await page.evaluate("window.voiceInstances.at(-1).finish('Magnets')")
             await lesson.get_by_role('heading', name='Lesson complete.').wait_for()
@@ -130,6 +172,7 @@ async def main():
             assert not await page.evaluate(ACTIVE)
             assert not errors, errors
             await browser.close()
-            print('PASS: PCM/mic motion, silence, echo rejection, interruption without ending listening, voice Stop, hidden navigation, upload → spoken questions → oral answers → grading → next question → final score, permission errors.')
+            print(f'PASS ({"full-duplex capability" if duplex else "safe turn-taking"}): shared processed track, PCM motion, actual spoken-text echo rejection, interruption, Stop releases microphone, voice lesson, permission errors.', flush=True)
 
 asyncio.run(main())
+asyncio.run(main(duplex=True))

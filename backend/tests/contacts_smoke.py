@@ -23,7 +23,7 @@ async def main():
                 return await request.fulfill(json=contact)
             return await request.fulfill(status=400,json={'detail':'Unexpected request'})
         await page.route('**/api/**',route)
-        await page.goto('http://127.0.0.1:8000')
+        await page.goto('http://127.0.0.1:8000/#assistant')
         await page.locator('.reveal-nav-trigger').focus()
         await page.keyboard.press('ArrowDown')
         await page.get_by_role('button',name='Settings & connections',exact=True).click()

@@ -26,6 +26,7 @@ body {
 }
 button,
 input,
+select,
 textarea {
   font: inherit;
 }
@@ -61,11 +62,13 @@ a:focus-visible {
   outline-offset: 4px;
 }
 input:focus,
+select:focus,
 textarea:focus {
   outline: none;
   border-color: #8271b4 !important;
 }
 input,
+select,
 textarea {
   color: inherit;
 }
@@ -1462,6 +1465,7 @@ label > span {
   float: right;
 }
 label input:not([type='range']),
+label select,
 label textarea,
 .quiz-panel > textarea {
   display: block;

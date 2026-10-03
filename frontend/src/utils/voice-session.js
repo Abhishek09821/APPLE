@@ -9,6 +9,8 @@ export class VoiceSession {
     onError,
     acceptTranscript = () => true,
     onSpeech = () => {},
+    acquireInput,
+    getLanguage = () => 'en-IN',
     schedule = (fn, delay) => setTimeout(fn, delay),
     cancel = (id) => clearTimeout(id),
   }) {
@@ -20,6 +22,8 @@ export class VoiceSession {
       onError,
       acceptTranscript,
       onSpeech,
+      acquireInput,
+      getLanguage,
       schedule,
       cancel,
     })
@@ -30,6 +34,7 @@ export class VoiceSession {
     this.timer = null
   }
   enable() {
+    if (this.enabled) return
     if (!this.Recognition) {
       this.onError(
         'Voice conversations need Chrome’s speech recognition. Open APPLE in Chrome and allow the microphone.',
@@ -38,12 +43,36 @@ export class VoiceSession {
     }
     this.enabled = true
     this.onState({ enabled: true, listening: false })
-    this.start()
+    if (!this.acquireInput) return this.start()
+    const capture = new AbortController()
+    this.capture = capture
+    Promise.resolve(this.acquireInput(capture.signal))
+      .then((input) => {
+        if (capture.signal.aborted || this.capture !== capture) {
+          input?.release?.()
+          return
+        }
+        this.input = input
+        this.start()
+      })
+      .catch((error) => {
+        if (capture.signal.aborted) return
+        this.disable()
+        this.onError(
+          error.name === 'NotAllowedError'
+            ? 'Microphone permission was denied. Allow the microphone in Chrome’s site settings, then start voice again.'
+            : error.message,
+        )
+      })
   }
   disable() {
     this.enabled = false
     this.cancel(this.timer)
     this.detach()
+    this.capture?.abort()
+    this.capture = null
+    this.input?.release?.()
+    this.input = null
     this.onTranscript('')
     this.onState({ enabled: false, listening: false })
   }
@@ -69,12 +98,19 @@ export class VoiceSession {
       this.timer = this.schedule(() => this.start(), 180)
   }
   start() {
-    if (!this.enabled || this.suspended || this.pending || this.rec) return
+    if (
+      !this.enabled ||
+      this.suspended ||
+      this.pending ||
+      this.rec ||
+      (this.acquireInput && !this.input)
+    )
+      return
     const rec = new this.Recognition()
     this.rec = rec
     let finalText = ''
     let heardSpeech = false
-    rec.lang = navigator.language || 'en-US'
+    rec.lang = this.getLanguage()
     rec.interimResults = true
     rec.continuous = false
     rec.onstart = () => {
@@ -89,6 +125,7 @@ export class VoiceSession {
         .trim()
       if (!transcript || !this.acceptTranscript(transcript)) {
         finalText = ''
+        this.onTranscript('')
         return
       }
       if (!heardSpeech) {
@@ -96,8 +133,17 @@ export class VoiceSession {
         this.onSpeech(transcript)
       }
       this.onTranscript(transcript)
-      finalText = results
-        .filter((r) => r.isFinal)
+      const finals = results.filter((r) => r.isFinal)
+      // Zero is also used by engines that don't report confidence at all.
+      // Never execute a positively reported low-confidence command.
+      if (finals.some((r) => r[0].confidence > 0 && r[0].confidence < 0.55)) {
+        finalText = ''
+        this.onError(
+          'I didn’t catch that clearly. Please say it again, or choose your spoken language in Settings.',
+        )
+        return
+      }
+      finalText = finals
         .map((r) => r[0].transcript)
         .join(' ')
         .trim()
@@ -128,7 +174,8 @@ export class VoiceSession {
       this.pending = true
       Promise.resolve()
         .then(() => {
-          if (this.enabled && !this.suspended) return this.onCommand(finalText)
+          if (this.enabled && !this.suspended && this.acceptTranscript(finalText))
+            return this.onCommand(finalText)
         })
         .catch((error) => this.onError(error.message))
         .finally(() => {
@@ -138,7 +185,8 @@ export class VoiceSession {
         })
     }
     try {
-      rec.start()
+      if (this.input?.track) rec.start(this.input.track)
+      else rec.start()
     } catch (error) {
       this.disable()
       this.onError(error.message)

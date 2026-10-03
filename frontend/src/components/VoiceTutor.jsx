@@ -16,6 +16,11 @@ export default function VoiceTutor({ tutor, transcript, listening }) {
         </button>
       </div>
       <p className="tutor-document">{lesson.document.name}</p>
+      {lesson.quiz?.generation_mode === 'source_review' && (
+        <p className="field-hint">
+          Quick source review · Complete statements taken directly from your document.
+        </p>
+      )}
       {lesson.stage === 'preparing' ? (
         <p role="status">
           <Loader2 className="spin" size={16} /> Reading your document and preparing questions…
@@ -40,7 +45,8 @@ export default function VoiceTutor({ tutor, transcript, listening }) {
       ) : (
         <>
           <span className="eyebrow">
-            QUESTION {lesson.index + 1} / {lesson.quiz.questions.length} · PAGE {question.page}
+            QUESTION {lesson.index + 1} / {lesson.quiz.questions.length} ·{' '}
+            {lesson.quiz.citation_label || 'Page'} {question.page}
           </span>
           <h2>{question.question}</h2>
           <p className="tutor-answer">

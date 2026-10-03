@@ -1,9 +1,24 @@
 import { useEffect, useRef, useState } from 'react'
 import { VoiceSession } from '../utils/voice-session'
 
-export function useVoiceSession({ suspended, onCommand, onError, onSpeech, acceptTranscript }) {
-  const callbacks = useRef({ onCommand, onError, onSpeech, acceptTranscript })
-  callbacks.current = { onCommand, onError, onSpeech, acceptTranscript }
+export function useVoiceSession({
+  suspended,
+  onCommand,
+  onError,
+  onSpeech,
+  acceptTranscript,
+  acquireInput,
+  language,
+}) {
+  const callbacks = useRef({
+    onCommand,
+    onError,
+    onSpeech,
+    acceptTranscript,
+    acquireInput,
+    language,
+  })
+  callbacks.current = { onCommand, onError, onSpeech, acceptTranscript, acquireInput, language }
   const session = useRef(null)
   const [state, setState] = useState({ enabled: false, listening: false })
   const [transcript, setTranscript] = useState('')
@@ -16,6 +31,8 @@ export function useVoiceSession({ suspended, onCommand, onError, onSpeech, accep
       onError: (message) => callbacks.current.onError(message),
       onSpeech: (text) => callbacks.current.onSpeech?.(text),
       acceptTranscript: (text) => callbacks.current.acceptTranscript?.(text) ?? true,
+      acquireInput: (signal) => callbacks.current.acquireInput(signal),
+      getLanguage: () => callbacks.current.language,
     })
     session.current = instance
     return () => {

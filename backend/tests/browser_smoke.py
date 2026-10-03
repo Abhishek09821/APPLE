@@ -25,7 +25,7 @@ async def main():
             await page.locator('.reveal-nav-trigger').focus()
             await page.keyboard.press('ArrowDown')
             await page.get_by_role('button', name=label, exact=True).click()
-        await page.goto('http://127.0.0.1:8000')
+        await page.goto('http://127.0.0.1:8000/#assistant')
         await page.get_by_role('heading', name='At your service.', exact=True).wait_for()
         await page.screenshot(path='/tmp/apple-desktop.png', full_page=True)
         await navigate('Knowledge library')
@@ -54,6 +54,12 @@ async def main():
         await page.get_by_text('APPLE UI test notes.txt', exact=True).wait_for(state='hidden')
         await navigate('Settings & connections')
         await page.get_by_role('heading', name='Local intelligence', exact=True).wait_for()
+        await page.get_by_label('Spoken language', exact=True).select_option('hi-IN')
+        assert await page.evaluate("localStorage.getItem('apple-speech-language')") == 'hi-IN'
+        await navigate('Assistant')
+        await navigate('Settings & connections')
+        assert await page.get_by_label('Spoken language', exact=True).input_value() == 'hi-IN'
+        await page.get_by_label('Spoken language', exact=True).select_option('en-IN')
         await page.screenshot(path='/tmp/apple-settings.png', full_page=True)
         await navigate('Assistant')
         await page.get_by_role('button', name='New session').click()
