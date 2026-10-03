@@ -9,7 +9,7 @@ from uuid import uuid4
 from fastapi import FastAPI, HTTPException, UploadFile, File, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.responses import StreamingResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from models import CommandRequest, Settings, Routine, Plan
@@ -17,6 +17,7 @@ from ai_parser import parse_command, model_status, ModelUnavailable
 from executor import execute_action, REVIEW_ACTIONS, close_browser
 from storage import put, get, list_records, delete, settings
 from knowledge import ingest, answer, make_quiz, public_quiz, grade_answer, MAX_BYTES
+from speech import spoken_text, spoken_result, render_audio, cancel_synthesis
 
 TOKEN = secrets.token_urlsafe(32)
 PENDING = {}
@@ -103,7 +104,7 @@ async def run_plan(req, plan, emit):
     if not success and len(results) < len(plan.actions):
         reply += '\nStopped before the remaining actions.'
     record = remember(req, reply, success=success, steps=results)
-    await emit({'type': 'done', **record, 'document': learned})
+    await emit({'type': 'done', **record, 'document': learned, 'spoken_reply': spoken_result(reply, results)})
 
 
 async def prepare(req, emit):
@@ -116,7 +117,7 @@ async def prepare(req, emit):
             if item.get('session_id') == req.session_id and item.get('document_id') == req.document_id:
                 history.extend([{'role': 'user', 'content': item['command']}, {'role': 'assistant', 'content': item['reply']}])
         reply, sources = await answer(req.document_id, req.command, history[-8:])
-        await emit({'type': 'done', **remember(req, reply, success=True, sources=sources, document_id=req.document_id)})
+        await emit({'type': 'done', **remember(req, reply, success=True, sources=sources, document_id=req.document_id), 'spoken_reply': spoken_text(reply)})
         return
     routine_name = req.command.removeprefix('Run ').removeprefix('run ').strip().lower()
     routine = next((r for r in list_records('routine') if r['name'].lower() == routine_name), None)
@@ -281,6 +282,7 @@ async def remove_routine(routine_id: str):
 SPEECH = None
 class Speech(BaseModel):
     text: str = Field(min_length=1, max_length=12000)
+    wait: bool = False
 
 
 async def stop_speech():
@@ -289,6 +291,16 @@ async def stop_speech():
         SPEECH.terminate()
         await SPEECH.wait()
     SPEECH = None
+    await cancel_synthesis()
+
+
+@app.post('/api/speech/audio')
+async def speech_audio(value: Speech):
+    if platform.system() != 'Darwin':
+        raise ValueError('Local speech requires macOS.')
+    data = await render_audio(value.text, settings().speech_rate)
+    return Response(content=data, media_type='audio/wav', status_code=200 if data else 204,
+                    headers={'Cache-Control': 'no-store'})
 
 
 @app.post('/api/speech')
@@ -297,7 +309,14 @@ async def speak(value: Speech):
     if platform.system() != 'Darwin':
         raise ValueError('Native voice requires macOS.')
     await stop_speech()
-    SPEECH = await asyncio.create_subprocess_exec('say', '-r', str(settings().speech_rate), '--', value.text)
+    clean = spoken_text(value.text)
+    if not clean:
+        return {'speaking': False, 'completed': True}
+    SPEECH = await asyncio.create_subprocess_exec('say', '-r', str(settings().speech_rate), '--', clean)
+    if value.wait:
+        process = SPEECH
+        code = await process.wait()
+        return {'speaking': False, 'completed': code == 0}
     return {'speaking': True}
 
 

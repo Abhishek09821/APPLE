@@ -120,7 +120,8 @@ export default function SettingsView({
         </button>
         <p className="field-hint">
           Microphone dictation uses your browser’s speech service and may send audio to its
-          provider. Review the transcript, then press Send. Chrome is recommended for dictation.
+          provider. Start a voice session to submit speech automatically, hear replies, and continue
+          hands-free. Chrome is recommended. The microphone pauses while APPLE speaks.
         </p>
       </div>
       <div className="settings-card">
@@ -139,7 +140,7 @@ export default function SettingsView({
         </div>
         <div className="capability-row">
           <span>WhatsApp messaging</span>
-          <span className="tag amber">QR LOGIN ON FIRST USE</span>
+          <span className="tag amber">INSTALLED MAC APP</span>
         </div>
         <div className="capability-row">
           <span>Typing in supported apps</span>
@@ -147,8 +148,9 @@ export default function SettingsView({
         </div>
         <p className="field-hint">
           Allow the launching terminal or Python app in System Settings → Privacy & Security →
-          Accessibility when using typing controls. WhatsApp uses a separate browser profile. App
-          layouts can change; failures are reported without claiming success.
+          Accessibility when using typing controls. WhatsApp uses the installed Mac app and requires
+          Accessibility access to select chats. App layouts can change; failures are reported
+          without claiming success.
         </p>
         <p className="field-hint">
           For other apps, teach a routine using a named macOS Shortcut. This assistant does not yet

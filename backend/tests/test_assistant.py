@@ -68,6 +68,17 @@ class AssistantTests(unittest.TestCase):
         self.client.put('/api/settings', headers=self.headers, json={'model': 'test-model', 'voice': False, 'speech_rate': 150})
         self.assertEqual(self.client.get('/api/settings').json()['model'], 'test-model')
 
+    def test_voice_session_waits_until_native_speech_finishes(self):
+        process = AsyncMock()
+        process.wait.return_value = 0
+        with patch.object(main.platform, 'system', return_value='Darwin'), \
+             patch.object(main, 'stop_speech', AsyncMock()), \
+             patch.object(main.asyncio, 'create_subprocess_exec', AsyncMock(return_value=process)):
+            result = self.post('/speech', json={'text': 'Ready.', 'wait': True})
+        self.assertEqual(result.json(), {'speaking': False, 'completed': True})
+        process.wait.assert_awaited_once()
+        main.SPEECH = None
+
     def test_document_path_rejects_outside_home(self):
         self.assertEqual(self.post('/documents/import', json={'path': '/etc/passwd'}).status_code, 400)
 

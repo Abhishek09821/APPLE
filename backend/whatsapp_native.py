@@ -1,0 +1,312 @@
+"""Bounded, fail-closed control of the installed macOS WhatsApp application.
+
+Uses Apple's Accessibility API through a static JXA bridge (no browser profile,
+clipboard, generated scripts, or coordinates). Unrecognised app layouts stop before
+typing. Sending still requires the approval enforced by main.run_plan.
+"""
+import asyncio
+import json
+from pathlib import Path
+import re
+import unicodedata
+from dataclasses import dataclass, field
+
+BUNDLE_ID = 'net.whatsapp.WhatsApp'
+ACCESSIBILITY_HELP = (
+    'WhatsApp is open, but APPLE needs Accessibility access to select a chat. '
+    'In System Settings → Privacy & Security → Accessibility, enable APPLE '
+    'or the app that starts it (Codex or Terminal), then restart APPLE. No message was sent.'
+)
+
+
+def normalise(value):
+    text = ''.join(c for c in str(value or '') if unicodedata.category(c) != 'Cf')
+    return ' '.join(unicodedata.normalize('NFKC', text).casefold().split())
+
+
+def phone_number(contact):
+    """Only explicit international numbers, never infer a country code."""
+    if re.fullmatch(r'\+?[1-9][0-9 ()\-]{6,22}', contact):
+        digits = re.sub(r'\D', '', contact)
+        if 8 <= len(digits) <= 15:
+            return digits
+    return None
+
+
+@dataclass
+class Node:
+    handle: int
+    role: str = ''
+    title: str = ''
+    description: str = ''
+    value: str = ''
+    placeholder: str = ''
+    identifier: str = ''
+    selected: bool = False
+    enabled: bool = True
+    children: list = field(default_factory=list)
+    parent: object = field(default=None, repr=False)
+
+    def walk(self):
+        yield self
+        for child in self.children:
+            yield from child.walk()
+
+    def ancestors(self):
+        node = self.parent
+        while node:
+            yield node
+            node = node.parent
+
+    def labels(self):
+        return [normalise(v) for v in (self.title, self.description, self.value) if v]
+
+
+def unique(nodes, reason):
+    found = {node.handle: node for node in nodes}
+    if len(found) != 1:
+        raise ValueError(reason)
+    return next(iter(found.values()))
+
+
+def search_field(tree):
+    return unique([
+        n for n in tree.walk()
+        if n.enabled and (n.identifier == 'TokenizedSearchBar_TextView' or (
+            n.role in {'AXTextField', 'AXSearchField', 'AXComboBox'}
+            and any('search' in normalise(v) for v in (n.description, n.title, n.placeholder, n.identifier))))
+    ], 'I could not identify WhatsApp’s chat search. Open its Chats tab, sign in if needed, and try again. No message was sent.')
+
+
+def message_field(tree):
+    return unique([
+        n for n in tree.walk()
+        if n.role in {'AXTextArea', 'AXTextField'} and n.enabled
+        and (n.identifier == 'ChatBar_ComposerTextView' or any(re.search(r'\b(type a message|message input|message field|message composer)\b', normalise(v))
+                for v in (n.description, n.title, n.placeholder, n.identifier)))
+    ], 'I could not verify WhatsApp’s message field. Open the requested chat in WhatsApp and try again. No message was sent.')
+
+
+def chat_region(tree, search):
+    """The nearest search ancestor containing results and no message composer."""
+    for node in search.ancestors():
+        descendants = list(node.walk())
+        has_results = any(n.role in {'AXTable', 'AXOutline', 'AXList'} or n.identifier == 'ChatListView_TableView'
+                          or normalise(n.description) == 'search results' for n in descendants)
+        has_composer = any(n.role == 'AXTextArea' for n in descendants)
+        if has_results and not has_composer:
+            return node
+    raise ValueError('WhatsApp’s chat list could not be identified safely. No message was sent.')
+
+
+def exact_chat(tree, contact):
+    region = chat_region(tree, search_field(tree))
+    candidates = []
+    for node in region.walk():
+        if normalise(contact) not in node.labels():
+            continue
+        # Never interpret matching message text or the search field as a contact.
+        if node.role not in {'AXStaticText', 'AXButton', 'AXRow', 'AXCell'}:
+            continue
+        if node.role == 'AXButton' and any(normalise(p.description) == 'search results' for p in node.ancestors()):
+            candidates.append(node)
+            continue
+        ancestry = (node, *node.ancestors())
+        row = next((p for p in ancestry if p.role == 'AXRow'), None)
+        row = row or next((p for p in ancestry if p.role == 'AXCell'), None)
+        if row and any(p.role in {'AXTable', 'AXOutline', 'AXList'} for p in row.ancestors()):
+            candidates.append(row)
+    return unique(candidates, f'I need one exact WhatsApp contact named “{contact}”. Use the full, unique saved name. No message was sent.')
+
+
+def verified_header(tree, contact):
+    """Require an exact recipient outside both the chat list and message rows."""
+    composer = message_field(tree)
+    native_headers = [n for n in tree.walk() if n.identifier == 'NavigationBar_HeaderViewButton']
+    if native_headers:
+        header = unique(native_headers, 'WhatsApp’s recipient header is ambiguous. No message was sent.')
+        number = phone_number(contact)
+        matches = normalise(contact) in header.labels() or (number and any(phone_number(v) == number for v in header.labels()))
+        if not matches:
+            raise ValueError('I could not verify the selected WhatsApp recipient. No message was sent.')
+        return composer
+    search = search_field(tree)
+    sidebar = chat_region(tree, search)
+    sidebar_ids = {n.handle for n in sidebar.walk()}
+    candidates = []
+    for node in tree.walk():
+        if node.handle in sidebar_ids or node.role not in {'AXStaticText', 'AXButton', 'AXHeading'}:
+            continue
+        matches = normalise(contact) in node.labels()
+        number = phone_number(contact)
+        if number:
+            matches = any(phone_number(v) == number for v in (node.title, node.description, node.value))
+        if not matches or any(p.role in {'AXRow', 'AXCell', 'AXTable', 'AXList', 'AXOutline'} for p in node.ancestors()):
+            continue
+        # A title must share a content pane with the composer, excluding the window.
+        shared = {p.handle for p in composer.ancestors() if p.role not in {'AXWindow', 'AXApplication'}}
+        if any(p.handle in shared for p in node.ancestors()):
+            candidates.append(node)
+    unique(candidates, 'I could not verify the selected WhatsApp recipient. Use the exact saved contact name. No message was sent.')
+    return composer
+
+
+def send_button(tree, composer):
+    for pane in composer.ancestors():
+        if pane.role in {'AXWindow', 'AXApplication'}:
+            break
+        candidates = [n for n in pane.walk() if n.role == 'AXButton' and n.enabled
+                      and (n.identifier == 'ChatBar_SendButton' or any(v in {'send', 'send message'} for v in n.labels()))]
+        if candidates:
+            return unique(candidates, 'WhatsApp’s Send button is ambiguous. The message remains a draft.')
+    raise ValueError('WhatsApp’s Send button could not be verified. The message remains a draft.')
+
+
+def outgoing_messages(tree, message):
+    """Count explicit outgoing bubbles; a cleared composer alone is not proof."""
+    matches = set()
+    for node in tree.walk():
+        if node.identifier == 'WAMessageBubbleTableViewCell':
+            # WhatsApp 26.x: "Your message, <text>, <time>, Sent to <name>, <status>".
+            # Incoming bubbles instead start "message" and say "Received from".
+            label = ''.join(c for c in node.description if unicodedata.category(c) != 'Cf')
+            prefix = 'Your message, '
+            if label.startswith(prefix + message + ',') and re.search(r',\s*Sent to [^,]+,', label):
+                matches.add(node.handle)
+            continue
+        if message not in (node.value, node.title, node.description):
+            continue
+        bubble = next((p for p in (node, *node.ancestors()) if p.role in {'AXRow', 'AXCell'}), None)
+        if bubble and any(re.search(r'\b(outgoing|sent by you|you said|you sent|delivered|sent message)\b', label)
+                          for n in bubble.walk() for label in n.labels()):
+            matches.add(bubble.handle)
+    return len(matches)
+
+
+class NativeAX:
+    """Async JXA bridge uses the launcher's granted macOS Accessibility access."""
+    def __init__(self, pid, process):
+        self.pid, self.process = pid, process
+        self.contact = ''
+
+    async def call(self, operation, **kwargs):
+        try:
+            result = await self.process('osascript', '-l', 'JavaScript', str(Path(__file__).with_name('whatsapp_ax.js')),
+                                        str(self.pid), json.dumps({'operation': operation, **kwargs}), timeout=5)
+            return json.loads(result)
+        except RuntimeError as exc:
+            if 'APPLE_ACCESSIBILITY_REQUIRED' in str(exc) or 'assistive access' in str(exc):
+                raise PermissionError(ACCESSIBILITY_HELP) from exc
+            raise
+
+    async def snapshot(self):
+        def build(data, parent=None):
+            children = data.pop('children', [])
+            node = Node(**data, parent=parent)
+            node.children = [build(child, node) for child in children]
+            return node
+        return build(await self.call('snapshot'))
+
+    async def show_search(self):
+        await self.call('show_search')
+
+    def data(self, node):
+        return {key: getattr(node, key) for key in ('handle', 'role', 'identifier', 'title', 'description', 'value')}
+
+    async def set_value(self, node, value):
+        await self.call('set_value', node=self.data(node), value=value,
+                        contact=self.contact if node.identifier == 'ChatBar_ComposerTextView' else '')
+
+    async def press(self, node, *, draft=None):
+        extra = {'draft': draft, 'contact': self.contact} if draft is not None else {}
+        await self.call('press', node=self.data(node), **extra)
+
+
+async def native_chat(ax, contact, message, send, *, phone=False):
+    if not phone:
+        if hasattr(ax, 'show_search'):
+            await ax.show_search()
+        await ax.set_value(search_field(await ax.snapshot()), contact)
+        await asyncio.sleep(0.35)
+        # Wait briefly for native search; never spend 90 seconds on a browser login.
+        row = None
+        for attempt in range(6):
+            try:
+                row = exact_chat(await ax.snapshot(), contact)
+                break
+            except ValueError:
+                if attempt == 5:
+                    raise
+                await asyncio.sleep(0.2)
+        await ax.press(row)
+        await asyncio.sleep(0.2)
+    tree = await ax.snapshot()
+    composer = verified_header(tree, contact)
+    if not send:
+        return {'message': f'Opened {contact} in the WhatsApp app.'}
+    if composer.value.strip():
+        raise ValueError('This WhatsApp chat already has a draft. Clear or send it in WhatsApp before trying again. No message was sent.')
+    before = outgoing_messages(tree, message)
+    # Recheck recipient and draft immediately before modifying the selected field.
+    composer = verified_header(await ax.snapshot(), contact)
+    if composer.value.strip():
+        raise ValueError('A WhatsApp draft appeared. I left it untouched. No message was sent.')
+    await ax.set_value(composer, message)
+    await asyncio.sleep(0.1)
+    tree = await ax.snapshot()
+    composer = verified_header(tree, contact)
+    if composer.value != message:
+        raise ValueError('WhatsApp’s draft does not match the approved message. Check the draft; nothing was sent.')
+    send_button(tree, composer)
+    # Yield before the single irreversible action so Stop can cancel it.
+    await asyncio.sleep(0)
+    current_tree = await ax.snapshot()
+    current = verified_header(current_tree, contact)
+    if current.value != message:
+        raise ValueError('The WhatsApp draft changed. Nothing was sent.')
+    await ax.press(send_button(current_tree, current), draft=message)
+    for _ in range(10):
+        await asyncio.sleep(0.25)
+        try:
+            tree = await ax.snapshot()
+            current = verified_header(tree, contact)
+        except (ValueError, RuntimeError, PermissionError, asyncio.TimeoutError):
+            break
+        if not current.value and outgoing_messages(tree, message) > before:
+            return {'message': f'WhatsApp displayed an outgoing message to {contact}. Delivery is not yet verified.'}
+    raise RuntimeError('I pressed Send in WhatsApp, but could not verify an outgoing message. Check the chat before retrying to avoid a duplicate.')
+
+
+async def whatsapp(contact, message, send, process):
+    contact = contact.strip()
+    if len(contact) > 120 or any(unicodedata.category(c) == 'Cc' for c in contact):
+        raise ValueError('Use a single contact name or international phone number, without line breaks or control characters.')
+    if send and (not contact or not message.strip()):
+        raise ValueError('A WhatsApp recipient and message are required.')
+    try:
+        await process('open', '-b', BUNDLE_ID)
+    except RuntimeError as exc:
+        raise RuntimeError('Install and sign in to the WhatsApp Mac app, then try again. No message was sent.') from exc
+    if not contact:
+        return {'message': 'Opened the WhatsApp app.'}
+    number = phone_number(contact)
+    if number:
+        # Do not prefill text: this must never replace an existing chat draft.
+        await process('open', '-b', BUNDLE_ID, f'whatsapp://send?phone={number}')
+        if not send:
+            return {'message': f'Opened WhatsApp for +{number}. Check the chat in the app.'}
+    await asyncio.sleep(0.2)
+    # Verify the process belongs to WhatsApp.app, never an unrelated same-name app.
+    candidates = await process('pgrep', '-x', 'WhatsApp')
+    pid = None
+    for value in candidates.splitlines():
+        if value.isdigit():
+            path = await process('ps', '-p', value, '-o', 'comm=')
+            if path.endswith('/WhatsApp.app/Contents/MacOS/WhatsApp'):
+                pid = int(value)
+                break
+    if pid is None:
+        raise RuntimeError('WhatsApp is still opening. Wait until its Chats screen appears, then try again. No message was sent.')
+    ax = NativeAX(pid, process)
+    ax.contact = contact
+    return await native_chat(ax, contact, message, send, phone=bool(number))

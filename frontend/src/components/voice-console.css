@@ -1,0 +1,374 @@
+.voice-console {
+  --vc-silver: #f0f1f5;
+  --vc-muted: #797e8c;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  min-height: 542px;
+  padding: 39px 20px 28px;
+  text-align: center;
+  isolation: isolate;
+}
+
+.vc-session-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 15px;
+  color: #8a8f9e;
+  font-size: 8px;
+  font-weight: 500;
+  line-height: 15px;
+  letter-spacing: 2px;
+}
+
+.vc-status-light {
+  display: block;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #88948e;
+  box-shadow: 0 0 6px #a9ccb52b;
+}
+
+.vc-listening .vc-status-light {
+  background: #a8d8c8;
+  box-shadow: 0 0 8px #a8d8c862;
+}
+
+.vc-speaking .vc-status-light {
+  background: #b6caff;
+  box-shadow: 0 0 8px #b6caff62;
+}
+
+.vc-thinking .vc-status-light,
+.vc-connecting .vc-status-light {
+  background: #b5b6c6;
+  animation: vc-process 1.5s ease-in-out infinite;
+}
+
+.vc-review .vc-status-light {
+  background: #dfc091;
+}
+
+.vc-offline .vc-status-light {
+  background: #c98585;
+}
+
+.vc-instrument {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 256px;
+  height: 256px;
+  margin: 15px 0 11px;
+}
+
+.vc-orbit {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  color: #555e712f;
+}
+
+.vc-core {
+  position: absolute;
+  width: 157px;
+  height: 157px;
+  margin-top: -13px;
+  filter: drop-shadow(0 8px 14px #0006) drop-shadow(0 0 10px #bac9ee0b);
+  will-change: transform;
+}
+
+.vc-halo {
+  position: absolute;
+  inset: 21px;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 10deg,
+    #7597ec36,
+    #ab88dc3b 28%,
+    #eaa9be24 54%,
+    #7dcbdd2b 80%,
+    #7597ec36
+  );
+  filter: blur(28px);
+  will-change: transform, opacity;
+}
+
+.vc-signal {
+  position: absolute;
+  bottom: 39px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 138px;
+  height: 27px;
+}
+
+.vc-signal-bar {
+  display: block;
+  flex: 0 0 2px;
+  height: 2px;
+  border-radius: 2px;
+  background: #dce6ff;
+}
+
+.vc-speaking .vc-signal-bar {
+  background: #d8d1ff;
+}
+
+.vc-copy {
+  width: 100%;
+}
+
+.vc-copy h1 {
+  margin: 0;
+  color: var(--vc-silver);
+  font-size: 32px;
+  font-weight: 450;
+  line-height: 1.2;
+  letter-spacing: -1.2px;
+}
+
+.vc-copy p {
+  min-height: 19px;
+  margin: 11px auto 0;
+  color: var(--vc-muted);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 19px;
+}
+
+.vc-transcript {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: min(100%, 570px);
+  min-height: 31px;
+  margin: 11px 0 9px;
+  color: #c4c8d1;
+  font-size: 13px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.vc-transcript span {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.vc-controls {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+}
+
+.vc-microphone,
+.vc-stop {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 40px;
+  border: 1px solid #ffffff16;
+  border-radius: 24px;
+  padding: 0 21px;
+  color: #15171e;
+  background: #f0f1f5;
+  font-size: 11px;
+  font-weight: 550;
+  white-space: nowrap;
+  transition:
+    background 160ms,
+    border-color 160ms;
+}
+
+.vc-microphone:hover {
+  background: #fff;
+}
+
+.vc-microphone-on {
+  border-color: #ffffff20;
+  color: #d1d5df;
+  background: #ffffff08;
+}
+
+.vc-microphone-on:hover {
+  background: #ffffff10;
+}
+
+.vc-stop {
+  position: absolute;
+  left: calc(100% + 9px);
+  height: 35px;
+  padding: 0 12px;
+  border-color: #ffffff0e;
+  color: #b5bac7;
+  background: #ffffff06;
+  font-weight: 400;
+}
+
+.vc-stop:hover {
+  color: #f0f1f5;
+  background: #ffffff10;
+}
+
+.vc-permission {
+  max-width: 450px;
+  min-height: 16px;
+  margin: 13px 0 0;
+  color: #606575;
+  font-size: 9px;
+  line-height: 16px;
+}
+
+/* A settled conversation uses a smaller instrument without moving controls
+   around as listening, thinking and speaking change. */
+.voice-console.vc-compact {
+  min-height: 390px;
+  padding-top: 20px;
+  padding-bottom: 20px;
+}
+
+.vc-compact .vc-instrument {
+  width: 194px;
+  height: 194px;
+  margin-top: 9px;
+  margin-bottom: 4px;
+}
+
+.vc-compact .vc-core {
+  width: 124px;
+  height: 124px;
+  margin-top: -8px;
+}
+
+.vc-compact .vc-signal {
+  bottom: 25px;
+  transform: scale(0.8);
+}
+
+.vc-compact .vc-copy h1 {
+  font-size: 25px;
+  letter-spacing: -0.8px;
+}
+
+.vc-compact .vc-copy p {
+  margin-top: 7px;
+}
+
+.vc-compact .vc-transcript {
+  min-height: 20px;
+  margin: 5px 0 7px;
+  font-size: 12px;
+}
+
+.vc-compact .vc-permission {
+  margin-top: 9px;
+}
+
+@keyframes vc-process {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (max-height: 780px) and (min-width: 681px) {
+  .voice-console {
+    min-height: 445px;
+    padding-top: 19px;
+    padding-bottom: 20px;
+  }
+
+  .vc-instrument {
+    width: 222px;
+    height: 222px;
+    margin-top: 8px;
+    margin-bottom: 4px;
+  }
+
+  .vc-core {
+    width: 145px;
+    height: 145px;
+  }
+
+  .vc-signal {
+    bottom: 27px;
+  }
+}
+
+@media (max-width: 680px) {
+  .voice-console {
+    min-height: 455px;
+    padding: 24px 12px 16px;
+  }
+
+  .vc-instrument {
+    width: 232px;
+    height: 232px;
+    margin-top: 10px;
+    margin-bottom: 8px;
+  }
+
+  .vc-core {
+    width: 149px;
+    height: 149px;
+  }
+
+  .vc-signal {
+    bottom: 32px;
+  }
+
+  .vc-copy h1 {
+    font-size: 29px;
+    letter-spacing: -0.9px;
+  }
+
+  .vc-copy p {
+    font-size: 11px;
+  }
+
+  .vc-permission {
+    max-width: 290px;
+    font-size: 8px;
+  }
+
+  .voice-console.vc-compact {
+    min-height: 365px;
+    padding: 13px 12px 16px;
+  }
+
+  .vc-compact .vc-instrument {
+    width: 176px;
+    height: 176px;
+  }
+
+  .vc-compact .vc-core {
+    width: 115px;
+    height: 115px;
+  }
+
+  .vc-compact .vc-signal {
+    bottom: 20px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .voice-console *,
+  .voice-console *::before,
+  .voice-console *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

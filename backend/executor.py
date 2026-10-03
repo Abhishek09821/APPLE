@@ -4,9 +4,10 @@ import platform
 from pathlib import Path
 from urllib.parse import quote, urlparse
 from models import Action
-from storage import DATA_DIR
+from whatsapp_native import whatsapp as native_whatsapp
 
-APP_MAP = {'chrome': 'Google Chrome', 'vs code': 'Visual Studio Code', 'vscode': 'Visual Studio Code'}
+APP_MAP = {'chrome': 'Google Chrome', 'vs code': 'Visual Studio Code', 'vscode': 'Visual Studio Code',
+           'whatsapp': 'WhatsApp', 'whats app': 'WhatsApp', 'what’s app': 'WhatsApp'}
 DESKTOP_LOCK = asyncio.Lock()
 REVIEW_ACTIONS = {'whatsapp_send', 'type_text', 'press_key', 'run_shortcut'}
 
@@ -44,6 +45,8 @@ async def _execute(a):
     target = a.target.strip()
     app = APP_MAP.get(target.lower(), target)
     if a.action == 'open_app':
+        if app == 'WhatsApp':
+            return await native_whatsapp('', '', False, process)
         await process('open', '-a', app)
         return {'message': f'Opened {app}.'}
     if a.action in {'open_website', 'google_search', 'youtube_search'}:
@@ -57,7 +60,13 @@ async def _execute(a):
         if parsed.scheme not in {'http', 'https'} or not parsed.hostname or parsed.username:
             raise ValueError('Use a valid http or https website address.')
         await process('open', url)
-        return {'message': f'Opened {url}', 'url': url}
+        if a.action == 'google_search':
+            message = f'Opened search results for {target}.'
+        elif a.action == 'youtube_search':
+            message = f'Opened YouTube results for {target}.'
+        else:
+            message = f'Opened {parsed.hostname}.'
+        return {'message': message, 'url': url}
     if a.action == 'find_file':
         output = await process('mdfind', '-name', target)
         paths = [p for p in output.splitlines() if Path(p).is_file()][:30]
@@ -113,61 +122,9 @@ if name of first application process whose frontmost is true is not appName then
     raise ValueError('Unsupported action.')
 
 
-_whatsapp_runtime = None
-_whatsapp_context = None
-
-
 async def close_browser():
-    global _whatsapp_runtime, _whatsapp_context
-    if _whatsapp_context:
-        await _whatsapp_context.close()
-    if _whatsapp_runtime:
-        await _whatsapp_runtime.stop()
-    _whatsapp_context = _whatsapp_runtime = None
+    """Compatibility lifecycle hook: native WhatsApp owns its own process."""
 
 
 async def whatsapp(contact, message, send):
-    global _whatsapp_runtime, _whatsapp_context
-    from playwright.async_api import async_playwright
-    if send and not message.strip():
-        raise ValueError('A message is required.')
-    if not _whatsapp_context or not _whatsapp_context.pages:
-        await close_browser()
-        _whatsapp_runtime = await async_playwright().start()
-        _whatsapp_context = await _whatsapp_runtime.chromium.launch_persistent_context(
-            str(DATA_DIR / 'whatsapp-profile'), headless=False)
-    context = _whatsapp_context
-    page = context.pages[0] if context.pages else await context.new_page()
-    if not page.url.startswith('https://web.whatsapp.com'):
-        await page.goto('https://web.whatsapp.com', wait_until='domcontentloaded')
-    await page.bring_to_front()
-    search = page.locator('#side [contenteditable="true"][role="textbox"]').first
-    try:
-        await search.wait_for(timeout=90000)
-    except Exception as exc:
-        raise RuntimeError('WhatsApp is not ready. Scan the QR code in the opened browser and try again. No message was sent.') from exc
-    await search.fill(contact)
-    match = page.locator('#pane-side').get_by_title(contact, exact=True)
-    await match.first.wait_for(timeout=15000)
-    if await match.count() != 1:
-        raise ValueError('More than one chat matches this name. Use a unique contact name.')
-    await match.click()
-    header = page.locator('#main header').get_by_title(contact, exact=True).first
-    await header.wait_for(timeout=10000)
-    if not send:
-        return {'message': f'Opened the exact WhatsApp chat for {contact}. The browser stays open.'}
-    composer = page.locator('#main footer [contenteditable="true"][role="textbox"]')
-    if (await composer.inner_text()).strip():
-        raise ValueError('This chat already has a draft. Clear or send that draft in WhatsApp before trying again.')
-    await composer.fill(message)
-    if not await header.is_visible():
-        raise ValueError('The selected chat changed. Message was not sent.')
-    before = await page.locator('#main .message-out').count()
-    await composer.press('Enter')
-    try:
-        await page.wait_for_function(
-            '(count) => document.querySelectorAll("#main .message-out").length > count',
-            arg=before, timeout=15000)
-    except Exception as exc:
-        raise RuntimeError('Send was requested, but WhatsApp did not confirm a new outgoing message. Check the chat before retrying.') from exc
-    return {'message': f'WhatsApp displayed a new outgoing message to {contact}. Delivery has not been verified.'}
+    return await native_whatsapp(contact, message, send, process)

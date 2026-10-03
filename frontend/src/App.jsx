@@ -3,64 +3,40 @@ import ActivityView from './components/ActivityView'
 import RoutinesView from './components/RoutinesView'
 import LibraryView from './components/LibraryView'
 import React, { useEffect, useRef, useState } from 'react'
+import { MotionConfig, motion } from 'motion/react'
+import VoiceStage from './components/VoiceStage'
+import { useVoiceSession } from './hooks/useVoiceSession'
+import { useAudioEngine } from './hooks/useAudioEngine'
+import './console-shell.css'
 import {
   ArrowUp,
   ArrowUpRight,
   AudioLines,
   BookOpen,
   Check,
-  ChevronRight,
   HelpCircle as CircleHelp,
   Command,
   FileText,
-  Globe,
   History,
   Layers,
   Loader2,
   Mic,
-  MoreHorizontal,
   Plus,
-  Search,
   Settings2,
   ShieldCheck,
-  Sparkles,
   Square,
   Volume2,
   VolumeX,
   X,
-  Zap,
 } from 'lucide-react'
 import { api, stream } from './utils/api'
-import { Orb, IconButton } from './components/ui'
+import { IconButton } from './components/ui'
 
 const navigation = [
   { id: 'assistant', label: 'Assistant', icon: Command },
   { id: 'library', label: 'Knowledge library', icon: BookOpen },
   { id: 'routines', label: 'My routines', icon: Layers },
   { id: 'activity', label: 'Activity', icon: History },
-]
-const suggestions = [
-  {
-    icon: Globe,
-    title: 'Explore something',
-    description: 'Search the web, follow your curiosity',
-    prompt: 'Search for the latest space discoveries',
-    color: 'blue',
-  },
-  {
-    icon: BookOpen,
-    title: 'Study with me',
-    description: 'Turn your notes into understanding',
-    view: 'library',
-    color: 'purple',
-  },
-  {
-    icon: Zap,
-    title: 'Make things happen',
-    description: 'Your apps. One simple instruction.',
-    prompt: 'Open Notes',
-    color: 'amber',
-  },
 ]
 const initialMessage = {
   id: 'welcome',
@@ -94,7 +70,9 @@ export default function App() {
   const [busy, setBusy] = useState(false)
   const [phase, setPhase] = useState('')
   const [voice, setVoice] = useState(() => localStorage.getItem('apple-voice') !== 'false')
-  const [listening, setListening] = useState(false)
+  const [speechPending, setSpeechPending] = useState(false)
+  const audio = useAudioEngine()
+  const speaking = audio.speaking
   const [documents, setDocuments] = useState([])
   const [routines, setRoutines] = useState([])
   const [history, setHistory] = useState([])
@@ -114,12 +92,48 @@ export default function App() {
   const [filePath, setFilePath] = useState('')
   const [speechRate, setSpeechRate] = useState(175)
   const controller = useRef(null)
-  const recognition = useRef(null)
+  const speechQueue = useRef(Promise.resolve())
+  const speechEpoch = useRef(0)
+  const audioEnabled = useRef(voice)
+  audioEnabled.current = voice
   const inputRef = useRef(null)
   const bottom = useRef(null)
   const fileInput = useRef(null)
   const session = useRef(crypto.randomUUID())
   const busyRef = useRef(false)
+
+  const approvalPending = messages.some((m) => m.approval)
+  const voiceSession = useVoiceSession({
+    suspended:
+      busy || speechPending || speaking || approvalPending || view !== 'assistant' || !connected,
+    onCommand: (text) =>
+      /^(stop|stop listening|end voice session)[.!?]?$/i.test(text.trim()) ? stop() : send(text),
+    onError: setError,
+  })
+  const listening = voiceSession.listening
+  useEffect(() => {
+    if (!listening) return
+    let stale = false
+    let release
+    const microphoneController = new AbortController()
+    audio
+      .monitorMicrophone(microphoneController.signal)
+      .then((cleanup) => {
+        if (stale) cleanup()
+        else release = cleanup
+      })
+      .catch(() => {
+        if (!stale)
+          setNotice(
+            'Audio visualization could not access the microphone. Voice recognition can still continue.',
+          )
+      })
+    return () => {
+      stale = true
+      microphoneController.abort()
+      release?.()
+    }
+  }, [listening, audio.monitorMicrophone])
 
   async function refresh() {
     try {
@@ -152,12 +166,14 @@ export default function App() {
     return () => {
       live = false
       clearInterval(timer)
-      recognition.current?.abort()
       controller.current?.abort()
+      speechEpoch.current += 1
+      speechQueue.current = Promise.resolve()
     }
   }, [])
   useEffect(() => {
-    bottom.current?.scrollIntoView({ behavior: 'smooth' })
+    const panel = bottom.current?.parentElement
+    if (panel) panel.scrollTop = panel.scrollHeight
   }, [messages, phase])
   useEffect(() => {
     const keydown = (event) => {
@@ -180,14 +196,45 @@ export default function App() {
   function patchMessage(id, values) {
     setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, ...values } : m)))
   }
-  async function speak(text) {
-    try {
-      await api('/speech', {
-        method: 'POST',
-        body: JSON.stringify({ text: text.slice(0, 12000) }),
+  function speak(text) {
+    if (!text?.trim()) return Promise.resolve()
+    const epoch = speechEpoch.current
+    audio.prepare().catch((e) => setError(e.message))
+    voiceSession.pause()
+    setSpeechPending(true)
+    const task = speechQueue.current
+      .catch(() => {})
+      .then(async () => {
+        if (epoch !== speechEpoch.current) return
+        await audio.play(text)
       })
-    } catch (e) {
-      setError(e.message)
+      .catch((e) => {
+        if (epoch === speechEpoch.current) setError(e.message)
+      })
+      .finally(() => {
+        if (speechQueue.current === task && epoch === speechEpoch.current) setSpeechPending(false)
+      })
+    speechQueue.current = task
+    return task
+  }
+  function cancelSpeech() {
+    speechEpoch.current += 1
+    audio.stop()
+    speechQueue.current = Promise.resolve()
+    setSpeechPending(false)
+    return api('/speech/stop', { method: 'POST' }).catch(() => {})
+  }
+  function toggleSession() {
+    audio.prepare().catch((e) => setError(e.message))
+    if (voiceSession.enabled) {
+      voiceSession.stop()
+      cancelSpeech()
+    } else {
+      setError('')
+      setView('assistant')
+      setVoice(true)
+      localStorage.setItem('apple-voice', 'true')
+      voiceSession.start()
     }
   }
   function eventHandler(id) {
@@ -197,7 +244,7 @@ export default function App() {
         patchMessage(id, { text: event.reply, actions: event.actions })
         setPhase(event.actions.length ? 'Working on your request…' : 'Preparing a response…')
       }
-      if (event.type === 'step')
+      if (event.type === 'step') {
         setMessages((prev) =>
           prev.map((m) => {
             if (m.id !== id) return m
@@ -206,13 +253,16 @@ export default function App() {
             return { ...m, steps }
           }),
         )
-      if (event.type === 'approval')
+      }
+      if (event.type === 'approval') {
+        if (audioEnabled.current) speak('Please confirm the recipient and message on screen.')
         patchMessage(id, {
           text: event.reply,
           approval: event.approval_id,
           actions: event.actions,
           pending: false,
         })
+      }
       if (event.type === 'done') {
         if (event.document) setSelectedDoc(event.document)
         patchMessage(id, {
@@ -223,20 +273,24 @@ export default function App() {
           sources: event.sources,
           results: event.steps,
         })
-        if (voice) speak(event.reply)
+        if (audioEnabled.current) speak(event.spoken_reply ?? event.reply)
         refresh()
       }
-      if (event.type === 'error')
+      if (event.type === 'error') {
+        if (audioEnabled.current) speak(event.message)
         patchMessage(id, {
           text: event.message,
           pending: false,
           success: false,
           approval: null,
         })
+      }
     }
   }
   async function send(text = input) {
-    if (!text.trim() || busyRef.current) return
+    if (!text.trim() || busyRef.current || approvalPending) return
+    voiceSession.pause()
+    audio.prepare().catch((e) => setError(e.message))
     const id = crypto.randomUUID()
     setView('assistant')
     setInput('')
@@ -319,8 +373,8 @@ export default function App() {
   }
   async function stop() {
     controller.current?.abort()
-    recognition.current?.abort()
-    setListening(false)
+    voiceSession.stop()
+    await cancelSpeech()
     try {
       await api('/stop', { method: 'POST' })
       setMessages((prev) =>
@@ -335,43 +389,9 @@ export default function App() {
   function toggleVoice() {
     setVoice(!voice)
     localStorage.setItem('apple-voice', String(!voice))
-    if (voice) api('/speech/stop', { method: 'POST' }).catch(() => {})
-  }
-  function listen() {
-    if (listening) {
-      recognition.current?.stop()
-      return
-    }
-    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition
-    if (!Recognition) {
-      setError(
-        'Dictation isn’t supported in this window. Open APPLE in Chrome to use the microphone. Spoken replies still work in the desktop app.',
-      )
-      return
-    }
-    const rec = new Recognition()
-    recognition.current = rec
-    rec.lang = 'en-US'
-    rec.interimResults = true
-    rec.continuous = false
-    rec.onstart = () => setListening(true)
-    rec.onend = () => setListening(false)
-    rec.onerror = (event) => {
-      setListening(false)
-      setError(`Microphone: ${event.error}. Check microphone permission and try again.`)
-    }
-    rec.onresult = (event) => {
-      setInput(
-        Array.from(event.results)
-          .map((r) => r[0].transcript)
-          .join(' '),
-      )
-    }
-    try {
-      rec.start()
-    } catch (e) {
-      setListening(false)
-      setError(e.message)
+    if (voice) {
+      voiceSession.stop()
+      cancelSpeech()
     }
   }
   async function doWork(fn) {
@@ -406,653 +426,445 @@ export default function App() {
     })
   }
   const welcome = messages.length === 1
-  const date = new Intl.DateTimeFormat('en', {
-    month: 'short',
-    day: 'numeric',
-  }).format(new Date())
   const activeTitle =
     view === 'settings' ? 'Settings' : navigation.find((n) => n.id === view)?.label
 
   return (
-    <div className="app-shell">
-      <aside className="sidebar">
-        <a
-          className="brand"
-          href="#"
-          onClick={(e) => {
-            e.preventDefault()
-            setView('assistant')
-          }}
-        >
-          <span className="brand-symbol">
-            <AudioLines size={21} />
-          </span>{' '}
-          apple<span className="brand-period">.</span>
-        </a>
-        <div className="workspace">
-          <span className="workspace-avatar">A</span>
-          <div>
-            Personal workspace<small>LOCAL DESKTOP ASSISTANT</small>
-          </div>
-          <MoreHorizontal size={16} />
-        </div>
-        <div className="nav-label">YOUR SPACE</div>
-        <nav>
-          {navigation.map(({ id, label, icon: Icon }) => (
-            <button
-              key={id}
-              aria-label={label}
-              className={`nav-item ${view === id ? 'selected' : ''}`}
-              onClick={() => {
-                setView(id)
-                setError('')
-              }}
-            >
-              <Icon size={18} />
-              <span>{label}</span>
-              {id === 'assistant' ? (
-                <kbd>⌘ K</kbd>
-              ) : id === 'library' && documents.length > 0 ? (
-                <span className="nav-count">{documents.length}</span>
-              ) : null}
-            </button>
-          ))}
-        </nav>
-        <div className="sidebar-routines">
-          <div className="nav-label">
-            PINNED ROUTINES
-            <button
-              aria-label="Create a routine"
-              onClick={() => {
-                setView('routines')
-                setRoutineForm(true)
-              }}
-            >
-              <Plus size={14} />
-            </button>
-          </div>
-          {routines.length ? (
-            routines.slice(0, 4).map((r) => (
+    <MotionConfig reducedMotion="user">
+      <div className={`app-shell console-shell ${view === 'assistant' ? 'console-active' : ''}`}>
+        <aside className="app-rail" aria-label="Main navigation">
+          <button
+            className="rail-brand"
+            aria-label="APPLE home"
+            title="APPLE"
+            onClick={() => setView('assistant')}
+          >
+            <svg viewBox="0 0 180 180" aria-hidden="true">
+              <path
+                d="M91 46C62 34 37 50 32 78C26 109 46 139 72 143C91 146 103 134 110 117C85 127 66 114 64 95C61 72 74 57 91 46Z"
+                fill="currentColor"
+              />
+              <path
+                d="M91 46C114 39 139 52 145 79C153 112 133 141 108 143C90 144 76 132 71 116C96 128 115 115 117 96C120 76 109 57 91 46Z"
+                fill="currentColor"
+                opacity=".65"
+              />
+              <path d="M94 34C95 19 106 12 120 14C119 28 109 37 94 34Z" fill="currentColor" />
+            </svg>
+          </button>
+          <nav>
+            {navigation.map(({ id, label, icon: Icon }) => (
               <button
-                key={r.id}
-                className="pinned"
-                disabled={busy}
+                key={id}
+                aria-label={label}
+                title={label}
+                className={`rail-item ${view === id ? 'selected' : ''}`}
                 onClick={() => {
-                  setSelectedDoc(null)
-                  setInput(`Run ${r.name}`)
-                  setView('assistant')
+                  setView(id)
+                  setError('')
                 }}
               >
-                <span className="tiny-dot" />
-                {r.name}
-                <ArrowUpRight size={13} />
+                <Icon size={19} strokeWidth={1.6} />
+                <span>{label}</span>
               </button>
-            ))
-          ) : (
-            <p className="sidebar-hint">
-              Good habits, on autopilot.
-              <br />
-              Teach your first routine.
-            </p>
-          )}
-        </div>
-        <div className="sidebar-bottom">
-          <div className="local-card">
-            <ShieldCheck size={18} />
-            <strong>Yours. Locally.</strong>
-            <p>
-              Conversations and knowledge
-              <br />
-              stay on your computer.
-            </p>
-            <span>
-              <i /> LOCAL AI ENGINE
-            </span>
-          </div>
+            ))}
+          </nav>
           <button
-            className={`nav-item ${view === 'settings' ? 'selected' : ''}`}
+            aria-label="Settings & connections"
+            title="Settings & connections"
+            className={`rail-item rail-settings ${view === 'settings' ? 'selected' : ''}`}
             onClick={() => setView('settings')}
           >
-            <Settings2 size={18} />
-            <span>Settings & connections</span>
+            <Settings2 size={19} strokeWidth={1.6} />
+            <span>Settings</span>
           </button>
-          <div className="profile">
-            <span className="profile-avatar">Y</span>
-            <div>
-              Your personal assistant<small>Made for your everyday</small>
+        </aside>
+
+        <main className="main-shell">
+          <header className="topbar">
+            <div className="breadcrumb">
+              <strong className="console-wordmark">APPLE</strong>
+              <span className="header-slash">/</span>
+              <span>{activeTitle}</span>
             </div>
-            <span className={`status-dot ${connected ? 'online' : ''}`} />
-          </div>
-        </div>
-      </aside>
-
-      <main className="main-shell">
-        <header className="topbar">
-          <div className="breadcrumb">
-            Workspace <ChevronRight size={13} />
-            <strong>{activeTitle}</strong>
-          </div>
-          <div className="top-actions">
-            <span className={`connection ${connected ? 'online' : ''}`}>
-              <i />
-              {connected ? 'System connected' : 'Backend offline'}
-            </span>
-            <span className="top-divider" />
-            <IconButton
-              label={voice ? 'Turn spoken replies off' : 'Turn spoken replies on'}
-              onClick={toggleVoice}
-            >
-              {voice ? <Volume2 size={17} /> : <VolumeX size={17} />}
-            </IconButton>
-            <IconButton label="Stop all actions and speech" onClick={stop}>
-              <Square size={14} />
-            </IconButton>
-          </div>
-        </header>
-        {error && (
-          <div className="banner error" role="alert">
-            <CircleHelp size={17} />
-            <span>{error}</span>
-            <IconButton label="Dismiss error" onClick={() => setError('')}>
-              <X size={16} />
-            </IconButton>
-          </div>
-        )}
-        {notice && (
-          <div className="toast" role="status">
-            <Check size={16} />
-            {notice}
-          </div>
-        )}
-        <div className="content-layout">
-          <div className={`primary-content ${view === 'assistant' ? 'chat-content' : ''}`}>
-            {view === 'assistant' && (
-              <>
-                <div className="section-heading">
-                  <div>
-                    <span className="eyebrow">A LITTLE HELP. A LOT MORE POSSIBILITY.</span>
-                    <h1>
-                      Your everyday, upgraded<span>.</span>
-                    </h1>
-                  </div>
-                  <button
-                    className="subtle-button"
-                    disabled={busy || messages.some((m) => m.approval)}
-                    onClick={() => {
-                      setMessages([initialMessage])
-                      session.current = crypto.randomUUID()
-                      setSelectedDoc(null)
-                    }}
-                  >
-                    <Plus size={15} /> New session
-                  </button>
-                </div>
-                <div className="chat-scroll">
-                  {welcome ? (
-                    <div className="welcome">
-                      <div className="orb-stage">
-                        <span className="orbit orbit-a" />
-                        <span className="orbit orbit-b" />
-                        <Orb active={listening || busy} />
-                        <span className="orb-spark spark-a" />
-                        <span className="orb-spark spark-b" />
-                      </div>
-                      <div className="ready-label">
-                        <span className="tiny-dot" />
-                        {listening ? 'LISTENING TO YOU' : 'HERE WHEN YOU NEED ME'}
-                      </div>
-                      <h2>
-                        A little less doing.
-                        <br />
-                        <span>A little more living.</span>
-                      </h2>
-                      <p>
-                        Think of me as an extra pair of hands, and a curious mind.
-                        <br />
-                        What would you like to make happen today?
-                      </p>
-                      <div className="suggestion-grid">
-                        {suggestions.map(
-                          ({ icon: Icon, title, description, prompt, view: next, color }) => (
-                            <button
-                              key={title}
-                              className="suggestion"
-                              onClick={() => (next ? setView(next) : setInput(prompt))}
-                            >
-                              <span className={`suggestion-icon ${color}`}>
-                                <Icon size={18} />
-                              </span>
-                              <ArrowUpRight className="suggestion-arrow" size={15} />
-                              <strong>{title}</strong>
-                              <span>{description}</span>
-                            </button>
-                          ),
-                        )}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="messages">
-                      {messages
-                        .filter((m) => !m.welcome)
-                        .map((m) => (
-                          <div className={`message ${m.role}`} key={m.id}>
-                            {m.role === 'assistant' && (
-                              <span className="assistant-avatar">
-                                <AudioLines size={16} />
-                              </span>
-                            )}
-                            <div className="message-body">
-                              <div className="message-meta">
-                                {m.role === 'assistant' ? 'APPLE' : 'YOU'}
-                                {m.pending && (
-                                  <span className="working-label">
-                                    <Loader2 size={12} className="spin" />
-                                    {phase || 'Working…'}
-                                  </span>
-                                )}
-                              </div>
-                              {m.text && (
-                                <div
-                                  className={`message-text ${m.success === false ? 'failed-text' : ''}`}
-                                >
-                                  {m.text}
-                                </div>
-                              )}
-                              {m.steps?.length > 0 && (
-                                <div className="execution-steps">
-                                  {m.steps.map((step, i) => (
-                                    <div key={i}>
-                                      {step.status === 'running' ? (
-                                        <Loader2 className="spin" size={13} />
-                                      ) : step.status === 'done' ? (
-                                        <Check size={13} />
-                                      ) : (
-                                        <X size={13} />
-                                      )}
-                                      <span>
-                                        {actionLabel(step.action.action)} · {step.action.target}
-                                      </span>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                              {m.approval && (
-                                <div className="approval-card">
-                                  <div className="approval-title">
-                                    <ShieldCheck size={17} />
-                                    Ready for your review
-                                  </div>
-                                  <p>Check the destination and content before these actions run.</p>
-                                  {m.actions.map((a, i) => (
-                                    <div className="approval-action" key={i}>
-                                      <span>{i + 1}</span>
-                                      <div>
-                                        <strong>
-                                          {actionLabel(a.action)} · {a.target}
-                                        </strong>
-                                        {a.message && <blockquote>{a.message}</blockquote>}
-                                      </div>
-                                    </div>
-                                  ))}
-                                  <div className="button-row">
-                                    <button
-                                      className="primary-button"
-                                      disabled={busy}
-                                      onClick={() => approve(m, true)}
-                                    >
-                                      <Check size={14} />
-                                      Run these actions
-                                    </button>
-                                    <button
-                                      className="secondary-button"
-                                      disabled={busy}
-                                      onClick={() => approve(m, false)}
-                                    >
-                                      Cancel
-                                    </button>
-                                  </div>
-                                </div>
-                              )}
-                              {m.sources?.length > 0 && (
-                                <div className="sources">
-                                  {[...new Map(m.sources.map((s) => [s.page, s])).values()].map(
-                                    (s) => (
-                                      <span title={s.text} key={s.page}>
-                                        <FileText size={12} />
-                                        {s.name} · p. {s.page}
-                                      </span>
-                                    ),
-                                  )}
-                                </div>
-                              )}
-                              {m.results?.some((r) => r.files?.length) && (
-                                <div className="file-results">
-                                  {m.results
-                                    .flatMap((r) => r.files || [])
-                                    .map((path) => (
-                                      <button
-                                        key={path}
-                                        onClick={() => setInput(`Open file ${path}`)}
-                                      >
-                                        <FileText size={14} />
-                                        {path}
-                                        <ArrowUpRight size={13} />
-                                      </button>
-                                    ))}
-                                </div>
-                              )}
-                              {m.role === 'assistant' && m.text && !m.pending && (
-                                <IconButton
-                                  label="Read this reply aloud"
-                                  onClick={() => speak(m.text)}
-                                >
-                                  <Volume2 size={13} />
-                                </IconButton>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      <div ref={bottom} />
-                    </div>
-                  )}
-                </div>
-                <div className="composer-area">
-                  {selectedDoc && (
-                    <div className="context-chip">
-                      <FileText size={14} />
-                      Asking about {selectedDoc.name}
-                      <button
-                        aria-label="Remove document context"
-                        onClick={() => setSelectedDoc(null)}
-                      >
-                        <X size={13} />
-                      </button>
-                    </div>
-                  )}
-                  <form
-                    className={`composer ${listening ? 'listening' : ''}`}
-                    onSubmit={(e) => {
-                      e.preventDefault()
-                      send()
-                    }}
-                  >
-                    <textarea
-                      ref={inputRef}
-                      aria-label="Message APPLE"
-                      placeholder={
-                        listening
-                          ? 'Listening…'
-                          : selectedDoc
-                            ? 'Ask a question about this document…'
-                            : 'Ask anything, or ask me to do something…'
-                      }
-                      value={input}
-                      onChange={(e) => setInput(e.target.value)}
-                      rows={2}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-                          e.preventDefault()
-                          send()
-                        }
-                      }}
-                    />
-                    <div className="composer-tools">
-                      <div>
-                        <IconButton
-                          label="Add a document"
-                          onClick={() => {
-                            setView('library')
-                            fileInput.current?.click()
-                          }}
-                          type="button"
-                        >
-                          <Plus size={20} />
-                        </IconButton>
-                        <span className="composer-divider" />
-                        <span className="model-label">
-                          <span className="tiny-dot" />
-                          {status?.ai?.ready ? status.ai.model : 'Local assistant'}
-                          <ChevronRight size={12} />
-                        </span>
-                      </div>
-                      <div>
-                        <IconButton
-                          label={listening ? 'Stop listening' : 'Dictate a command'}
-                          onClick={listen}
-                          disabled={busy}
-                          type="button"
-                        >
-                          {listening ? <AudioLines size={19} /> : <Mic size={18} />}
-                        </IconButton>
-                        {busy ? (
-                          <button
-                            className="send-button"
-                            type="button"
-                            aria-label="Stop request"
-                            onClick={stop}
-                          >
-                            <Square size={16} />
-                          </button>
-                        ) : (
-                          <button
-                            className="send-button"
-                            type="submit"
-                            aria-label="Send command"
-                            disabled={!input.trim()}
-                          >
-                            <ArrowUp size={19} />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </form>
-                  <div className="composer-caption">
-                    <span>
-                      <ShieldCheck size={12} /> Local reasoning. Real actions. You’re in control.
-                    </span>
-                    <span>
-                      ↵ to send <b>·</b> shift ↵ for a new line
-                    </span>
-                  </div>
-                </div>
-              </>
-            )}
-
-            {view === 'library' && (
-              <LibraryView
-                quiz={quiz}
-                setQuiz={setQuiz}
-                questionIndex={questionIndex}
-                setQuestionIndex={setQuestionIndex}
-                answer={answer}
-                setAnswer={setAnswer}
-                grade={grade}
-                setGrade={setGrade}
-                working={working}
-                doWork={doWork}
-                fileInput={fileInput}
-                upload={upload}
-                filePath={filePath}
-                setFilePath={setFilePath}
-                refresh={refresh}
-                setNotice={setNotice}
-                documents={documents}
-                librarySearch={librarySearch}
-                setLibrarySearch={setLibrarySearch}
-                setSelectedDoc={setSelectedDoc}
-                setView={setView}
-                setInput={setInput}
-                startQuiz={startQuiz}
-                selectedDoc={selectedDoc}
-              />
-            )}
-
-            {view === 'routines' && (
-              <RoutinesView
-                setRoutineForm={setRoutineForm}
-                routineForm={routineForm}
-                routineName={routineName}
-                setRoutineName={setRoutineName}
-                routineSteps={routineSteps}
-                setRoutineSteps={setRoutineSteps}
-                doWork={doWork}
-                refresh={refresh}
-                setNotice={setNotice}
-                working={working}
-                routines={routines}
-                busy={busy}
-                setSelectedDoc={setSelectedDoc}
-                setView={setView}
-                setInput={setInput}
-              />
-            )}
-
-            {view === 'activity' && <ActivityView history={history} />}
-
-            {view === 'settings' && (
-              <SettingsView
-                status={status}
-                model={model}
-                setModel={setModel}
-                refresh={refresh}
-                setNotice={setNotice}
-                voice={voice}
-                toggleVoice={toggleVoice}
-                speechRate={speechRate}
-                setSpeechRate={setSpeechRate}
-                speak={speak}
-                working={working}
-                doWork={doWork}
-              />
-            )}
-          </div>
-
-          <aside className="context-panel">
-            <div className="context-header">
-              <span>AT A GLANCE</span>
-              <span>{date}</span>
-            </div>
-            <div className="assistant-status">
-              <Orb small active={busy || listening} />
-              <h3>{busy ? 'On it.' : listening ? 'All ears.' : 'Ready when you are.'}</h3>
-              <p>
-                {busy
-                  ? phase || 'Taking it one step at a time.'
-                  : 'A calmer way to get things done.'}
-              </p>
-              <span className={`status-pill ${connected ? '' : 'offline'}`}>
+            <div className="top-actions">
+              <span className={`connection ${connected ? 'online' : ''}`}>
                 <i />
                 {connected
                   ? status?.ai?.ready
-                    ? 'LOCAL AI CONNECTED'
-                    : 'BASIC TOOLS READY'
-                  : 'CONNECT YOUR BACKEND'}
+                    ? 'AI connected'
+                    : 'Basic tools ready'
+                  : 'Backend offline'}
               </span>
-            </div>
-            <div className="context-section">
-              <div className="context-section-title">
-                YOUR TOOLKIT
-                <Sparkles size={14} />
-              </div>
-              <button
-                className="tool-row"
-                onClick={() => {
-                  setView('assistant')
-                  setInput('Open Chrome')
-                }}
+              <span className="top-divider" />
+              <IconButton
+                label={voice ? 'Turn spoken replies off' : 'Turn spoken replies on'}
+                onClick={toggleVoice}
               >
-                <span className="tool-icon blue">
-                  <Command size={16} />
-                </span>
-                <div>
-                  Computer control<small>Apps, files, and the web</small>
-                </div>
-                <span className={`status-dot ${connected ? 'online' : ''}`} />
-              </button>
-              <button className="tool-row" onClick={() => setView('library')}>
-                <span className="tool-icon purple">
-                  <BookOpen size={16} />
-                </span>
-                <div>
-                  Knowledge & learning
-                  <small>
-                    {documents.length
-                      ? `${documents.length} documents in your library`
-                      : 'Your own personal study partner'}
-                  </small>
-                </div>
-                <ChevronRight size={14} />
-              </button>
-              <button className="tool-row" onClick={() => setView('routines')}>
-                <span className="tool-icon amber">
-                  <Zap size={16} />
-                </span>
-                <div>
-                  Personal routines<small>Teach once, use whenever</small>
-                </div>
-                <ChevronRight size={14} />
-              </button>
+                {voice ? <Volume2 size={17} /> : <VolumeX size={17} />}
+              </IconButton>
+              <IconButton label="Stop all actions and speech" onClick={stop}>
+                <Square size={14} />
+              </IconButton>
             </div>
-            <div className="context-section">
-              <div className="context-section-title">
-                RECENT ACTIVITY
-                <button onClick={() => setView('activity')}>
-                  View all
-                  <ArrowUpRight size={12} />
-                </button>
-              </div>
-              {history.length ? (
-                history.slice(0, 3).map((h) => (
-                  <div className="recent-item" key={h.id}>
-                    <span className={`recent-dot ${h.success ? '' : 'failed'}`} />
-                    <div>
-                      <p>{h.command}</p>
-                      <small>
-                        {new Date(h.created).toLocaleTimeString([], {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}{' '}
-                        · {h.success ? 'Completed' : 'Needs attention'}
-                      </small>
+          </header>
+          {error && (
+            <div className="banner error" role="alert">
+              <CircleHelp size={17} />
+              <span>{error}</span>
+              <IconButton label="Dismiss error" onClick={() => setError('')}>
+                <X size={16} />
+              </IconButton>
+            </div>
+          )}
+          {notice && (
+            <div className="toast" role="status">
+              <Check size={16} />
+              {notice}
+            </div>
+          )}
+          <div className="content-layout">
+            <div className={`primary-content ${view === 'assistant' ? 'chat-content' : ''}`}>
+              {view === 'assistant' && (
+                <>
+                  <div className="section-heading">
+                    <span className="session-label">YOUR PERSONAL ASSISTANT</span>
+                    <button
+                      className="subtle-button"
+                      disabled={busy || speechPending || messages.some((m) => m.approval)}
+                      onClick={() => {
+                        setMessages([initialMessage])
+                        session.current = crypto.randomUUID()
+                        setSelectedDoc(null)
+                      }}
+                    >
+                      <Plus size={15} /> New session
+                    </button>
+                  </div>
+                  <div className="chat-scroll">
+                    <VoiceStage
+                      compact={!welcome}
+                      enabled={voiceSession.enabled}
+                      listening={listening}
+                      speaking={speaking}
+                      audioLevel={audio.level}
+                      busy={busy || speechPending}
+                      phase={speechPending && !speaking ? 'Preparing voice…' : phase}
+                      transcript={voiceSession.transcript}
+                      ready={status?.ai?.ready}
+                      connected={connected}
+                      approval={approvalPending}
+                      onToggle={toggleSession}
+                      onStop={stop}
+                      onLibrary={() => setView('library')}
+                      onPrompt={send}
+                    />
+                    {!welcome && (
+                      <div className="messages">
+                        {messages
+                          .filter((m) => !m.welcome)
+                          .slice(-2)
+                          .map((m) => (
+                            <motion.div
+                              initial={{ opacity: 0, y: 8 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              className={`message ${m.role}`}
+                              key={m.id}
+                            >
+                              {m.role === 'assistant' && (
+                                <span className="assistant-avatar">
+                                  <AudioLines size={16} />
+                                </span>
+                              )}
+                              <div className="message-body">
+                                <div className="message-meta">
+                                  {m.role === 'assistant' ? 'APPLE' : 'YOU'}
+                                  {m.pending && (
+                                    <span className="working-label">
+                                      <Loader2 size={12} className="spin" />
+                                      {phase || 'Working…'}
+                                    </span>
+                                  )}
+                                </div>
+                                {m.text && (
+                                  <div
+                                    className={`message-text ${m.success === false ? 'failed-text' : ''}`}
+                                  >
+                                    {m.text}
+                                  </div>
+                                )}
+                                {m.steps?.length > 0 && (
+                                  <div className="execution-steps">
+                                    {m.steps.map((step, i) => (
+                                      <div key={i}>
+                                        {step.status === 'running' ? (
+                                          <Loader2 className="spin" size={13} />
+                                        ) : step.status === 'done' ? (
+                                          <Check size={13} />
+                                        ) : (
+                                          <X size={13} />
+                                        )}
+                                        <span>
+                                          {actionLabel(step.action.action)} · {step.action.target}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                                {m.approval && (
+                                  <div className="approval-card">
+                                    <div className="approval-title">
+                                      <ShieldCheck size={17} />
+                                      Ready for your review
+                                    </div>
+                                    <p>
+                                      Check the destination and content before these actions run.
+                                    </p>
+                                    {m.actions.map((a, i) => (
+                                      <div className="approval-action" key={i}>
+                                        <span>{i + 1}</span>
+                                        <div>
+                                          <strong>
+                                            {actionLabel(a.action)} · {a.target}
+                                          </strong>
+                                          {a.message && <blockquote>{a.message}</blockquote>}
+                                        </div>
+                                      </div>
+                                    ))}
+                                    <div className="button-row">
+                                      <button
+                                        className="primary-button"
+                                        disabled={busy}
+                                        onClick={() => approve(m, true)}
+                                      >
+                                        <Check size={14} />
+                                        Run these actions
+                                      </button>
+                                      <button
+                                        className="secondary-button"
+                                        disabled={busy}
+                                        onClick={() => approve(m, false)}
+                                      >
+                                        Cancel
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+                                {m.sources?.length > 0 && (
+                                  <div className="sources">
+                                    {[...new Map(m.sources.map((s) => [s.page, s])).values()].map(
+                                      (s) => (
+                                        <span title={s.text} key={s.page}>
+                                          <FileText size={12} />
+                                          {s.name} · p. {s.page}
+                                        </span>
+                                      ),
+                                    )}
+                                  </div>
+                                )}
+                                {m.results?.some((r) => r.files?.length) && (
+                                  <div className="file-results">
+                                    {m.results
+                                      .flatMap((r) => r.files || [])
+                                      .map((path) => (
+                                        <button
+                                          key={path}
+                                          onClick={() => setInput(`Open file ${path}`)}
+                                        >
+                                          <FileText size={14} />
+                                          {path}
+                                          <ArrowUpRight size={13} />
+                                        </button>
+                                      ))}
+                                  </div>
+                                )}
+                                {m.role === 'assistant' && m.text && !m.pending && (
+                                  <IconButton
+                                    label="Read this reply aloud"
+                                    onClick={() => speak(m.text)}
+                                  >
+                                    <Volume2 size={13} />
+                                  </IconButton>
+                                )}
+                              </div>
+                            </motion.div>
+                          ))}
+                        <div ref={bottom} />
+                      </div>
+                    )}
+                  </div>
+                  <div className="composer-area">
+                    {selectedDoc && (
+                      <div className="context-chip">
+                        <FileText size={14} />
+                        Asking about {selectedDoc.name}
+                        <button
+                          aria-label="Remove document context"
+                          onClick={() => setSelectedDoc(null)}
+                        >
+                          <X size={13} />
+                        </button>
+                      </div>
+                    )}
+                    <form
+                      className={`composer ${listening ? 'listening' : ''}`}
+                      onSubmit={(e) => {
+                        e.preventDefault()
+                        send()
+                      }}
+                    >
+                      <textarea
+                        ref={inputRef}
+                        aria-label="Message APPLE"
+                        placeholder={
+                          listening
+                            ? 'Type a command…'
+                            : selectedDoc
+                              ? 'Ask a question about this document…'
+                              : 'Type a command…'
+                        }
+                        value={input}
+                        onChange={(e) => setInput(e.target.value)}
+                        rows={1}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                            e.preventDefault()
+                            send()
+                          }
+                        }}
+                      />
+                      <div className="composer-tools">
+                        <div>
+                          <IconButton
+                            label="Add a document"
+                            onClick={() => {
+                              setView('library')
+                              fileInput.current?.click()
+                            }}
+                            type="button"
+                          >
+                            <Plus size={20} />
+                          </IconButton>
+                        </div>
+                        <div>
+                          <IconButton
+                            label={
+                              voiceSession.enabled ? 'End voice session' : 'Start voice session'
+                            }
+                            onClick={toggleSession}
+                            disabled={busy}
+                            type="button"
+                          >
+                            {listening ? <AudioLines size={19} /> : <Mic size={18} />}
+                          </IconButton>
+                          {busy ? (
+                            <button
+                              className="send-button"
+                              type="button"
+                              aria-label="Stop request"
+                              onClick={stop}
+                            >
+                              <Square size={16} />
+                            </button>
+                          ) : (
+                            <button
+                              className="send-button"
+                              type="submit"
+                              aria-label="Send command"
+                              disabled={!input.trim() || approvalPending}
+                            >
+                              <ArrowUp size={19} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </form>
+                    <div className="composer-caption">
+                      <span>On your Mac. In your control.</span>
+                      <span>⌘ K to type</span>
                     </div>
                   </div>
-                ))
-              ) : (
-                <p className="quiet-text">
-                  A clear desk. A fresh start.
-                  <br />
-                  Your activity will appear here.
-                </p>
+                </>
+              )}
+
+              {view === 'library' && (
+                <LibraryView
+                  quiz={quiz}
+                  setQuiz={setQuiz}
+                  questionIndex={questionIndex}
+                  setQuestionIndex={setQuestionIndex}
+                  answer={answer}
+                  setAnswer={setAnswer}
+                  grade={grade}
+                  setGrade={setGrade}
+                  working={working}
+                  doWork={doWork}
+                  fileInput={fileInput}
+                  upload={upload}
+                  filePath={filePath}
+                  setFilePath={setFilePath}
+                  refresh={refresh}
+                  setNotice={setNotice}
+                  documents={documents}
+                  librarySearch={librarySearch}
+                  setLibrarySearch={setLibrarySearch}
+                  setSelectedDoc={setSelectedDoc}
+                  setView={setView}
+                  setInput={setInput}
+                  startQuiz={startQuiz}
+                  selectedDoc={selectedDoc}
+                />
+              )}
+
+              {view === 'routines' && (
+                <RoutinesView
+                  setRoutineForm={setRoutineForm}
+                  routineForm={routineForm}
+                  routineName={routineName}
+                  setRoutineName={setRoutineName}
+                  routineSteps={routineSteps}
+                  setRoutineSteps={setRoutineSteps}
+                  doWork={doWork}
+                  refresh={refresh}
+                  setNotice={setNotice}
+                  working={working}
+                  routines={routines}
+                  busy={busy}
+                  setSelectedDoc={setSelectedDoc}
+                  setView={setView}
+                  setInput={setInput}
+                />
+              )}
+
+              {view === 'activity' && <ActivityView history={history} />}
+
+              {view === 'settings' && (
+                <SettingsView
+                  status={status}
+                  model={model}
+                  setModel={setModel}
+                  refresh={refresh}
+                  setNotice={setNotice}
+                  voice={voice}
+                  toggleVoice={toggleVoice}
+                  speechRate={speechRate}
+                  setSpeechRate={setSpeechRate}
+                  speak={speak}
+                  working={working}
+                  doWork={doWork}
+                />
               )}
             </div>
-            <div className="daily-tip">
-              <span>
-                <Sparkles size={13} /> A LITTLE INSPIRATION
-              </span>
-              <p>
-                “Learn these notes.
-                <br />
-                Then put me to the test.”
-              </p>
-              <button onClick={() => setView('library')}>
-                Try a study session
-                <ArrowUpRight size={14} />
-              </button>
-            </div>
-            <div className="panel-footer">
-              <span className="tiny-dot" />
-              DESIGNED AROUND YOU
-            </div>
-          </aside>
-        </div>
-        <input
-          ref={fileInput}
-          type="file"
-          accept=".pdf,.txt,.md"
-          hidden
-          onChange={(e) => upload(e.target.files[0])}
-        />
-      </main>
-    </div>
+          </div>
+          <input
+            ref={fileInput}
+            type="file"
+            accept=".pdf,.txt,.md"
+            hidden
+            onChange={(e) => upload(e.target.files[0])}
+          />
+        </main>
+      </div>
+    </MotionConfig>
   )
 }

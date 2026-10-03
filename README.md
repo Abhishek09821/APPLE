@@ -48,7 +48,7 @@ APPLE calls only the local Ollama endpoint at `127.0.0.1:11434`. The API uses [O
 | `Open file ~/Documents/notes.pdf` | Opens a document or image inside your home folder |
 | `Create folder Revision` | Creates the folder on your Desktop |
 | `Learn ~/Documents/biology.pdf` | Imports the document and selects it for follow-up questions |
-| `Open Rahul chat in WhatsApp` | Finds an exact, unique chat in the dedicated WhatsApp browser |
+| `Open Rahul chat in WhatsApp` | Finds an exact, unique chat in the installed WhatsApp Mac app |
 | `WhatsApp Rahul: I will be there at 7` | Shows the exact contact and text for review, then attempts sending |
 | `Run shortcut Focus time` | Reviews and runs an existing macOS Shortcut |
 | `Run My morning` | Runs a routine saved in My routines |
@@ -57,15 +57,13 @@ With a model connected, you can have conversations, phrase requests naturally, g
 
 ### Voice
 
-Spoken replies use macOS `say` and the system’s default voice. Toggle them in the top bar, read an individual reply aloud, or adjust the speaking rate in Settings. Stop interrupts speech and active commands.
+Spoken replies are synthesized locally with macOS `say` and the system’s default voice, then played in the browser through Web Audio. Microphone and playback amplitude drive the icon, glow and voice meter in real time; silence settles the meter. Emoji, raw URLs and Markdown are excluded from speech. Long replies stay on screen while the voice reads a concise version. Toggle them in the top bar, read an individual reply aloud, or adjust the speaking rate in Settings. Stop interrupts speech and active commands.
 
-The microphone uses browser speech recognition when available. Chrome supports this more broadly than the native WebKit window. Dictation produces an editable transcript; press Send to execute. Browser dictation may transmit audio to the browser provider. Native spoken replies work without a cloud speech service. Always-listening wake words and offline speech recognition are not implemented.
+The microphone uses browser speech recognition when available. Chrome supports this more broadly than the native WebKit window. Choose **Start listening**, allow the microphone, and speak naturally. Final speech is submitted automatically; no Send or Enter is needed. The silver APPLE instrument shows listening, working, and speaking states. APPLE speaks a concise result and resumes listening after playback finishes. Common spoken app/search/WhatsApp commands bypass model inference. Qwen3 uses non-thinking mode with a smaller context and stays loaded for fifteen minutes after use. The microphone pauses during replies and while a plan needs on-screen confirmation. **End session** stops listening; **Stop** cancels pending work and speech. Typed requests remain available. Browser speech recognition requires a connection in Chrome and is not a system-wide wake-word service. Browser dictation may transmit audio to the browser provider. Native spoken replies work without a cloud speech service. Always-listening wake words and offline speech recognition are not implemented.
 
 ### WhatsApp and typing
 
-Setup installs Playwright’s Chromium browser. The first WhatsApp command opens a separate browser profile and waits up to 90 seconds for you to scan the QR code. The login persists locally, and the chat window stays open. Your existing Chrome profile is not used.
-
-The adapter requires an exact, unique chat name, verifies the selected chat header, and refuses to overwrite an existing draft. Sending requires approval of the concrete plan; the approval expires in ten minutes and can be used only once. An outgoing message appearing in the UI is reported separately from delivery. If verification fails after pressing Send, check the chat before retrying. WhatsApp UI changes may require selector updates.
+WhatsApp commands use the installed macOS app. Sign in to WhatsApp and grant APPLE’s launcher Accessibility access in System Settings → Privacy & Security. Named chats must match one unique saved contact; the adapter verifies the selected recipient and refuses to overwrite an existing draft. “Send hii to Rahul” creates a reviewable message plan. Sending requires the existing on-screen confirmation, expires after ten minutes, and can happen only once per approval. There is no automatic browser fallback. An outgoing message appearing in the native UI is reported separately from delivery; check the chat before retrying any uncertain send. Native app updates can change its accessibility layout.
 
 Explicit typing/key actions support Notes, TextEdit, Messages, WhatsApp, Mail, and Slack. Open the app and choose the destination text field first. Grant the launching terminal/Python app Accessibility permission in System Settings → Privacy & Security when needed. APPLE verifies the focused application, but cannot identify an arbitrary focused field. Typing and key presses are reviewed before execution. Use a named macOS Shortcut for more specialized app behavior.
 
@@ -94,12 +92,15 @@ The old demo responses, brittle notification toggles, and nonpersistent schedule
 - `backend/main.py`: loopback API, stream lifecycle, single-use approvals, API authentication, native speech.
 - `backend/models.py`: validated settings and bounded action-plan schemas.
 - `backend/ai_parser.py`: explicit offline commands and local Ollama reasoning.
-- `backend/executor.py`: asynchronous macOS and persistent WhatsApp adapters.
+- `backend/executor.py`: asynchronous macOS actions.
+- `backend/whatsapp_native.py`: verified native WhatsApp control.
+- `backend/whatsapp_ax.js`: bounded native Accessibility bridge using macOS automation permissions.
+- `backend/speech.py`: concise narration and local PCM speech synthesis.
 - `backend/knowledge.py`: PDF extraction, local retrieval, question generation and grading.
 - `backend/storage.py`: transactional SQLite persistence.
 - `backend/desktop.py`: optional native pywebview window.
 
-Local data is stored under `backend/data/` (`apple.db`, `whatsapp-profile/`). Set `APPLE_DATA_DIR` to a separate directory for isolated tests. The local database contains private conversations and document text; it is not encrypted by the app. Standard system account and disk protection apply.
+Local data is stored under `backend/data/apple.db`. Older `whatsapp-profile/` folders are not used by the native adapter. Set `APPLE_DATA_DIR` to a separate directory for isolated tests. The local database contains private conversations and document text; it is not encrypted by the app. Standard system account and disk protection apply.
 
 The server binds to loopback, validates host/origin, and requires a process-scoped token for mutations. Personal records stay local; explicitly requested web navigation and messaging use the internet. Do not expose the backend to a network or run untrusted applications under the same account.
 
@@ -114,7 +115,7 @@ npm run format:check
 npm audit
 ```
 
-With the local app running and Chromium installed:
+With the local app running and Playwright Chromium installed:
 
 ```bash
 .venv/bin/python backend/tests/browser_smoke.py
@@ -122,4 +123,8 @@ With the local app running and Chromium installed:
 .venv/bin/python backend/tests/desktop_smoke.py
 ```
 
+The voice browser test (`backend/tests/voice_smoke.py`) uses synthetic microphone and PCM audio to verify real amplitude/silence synchronization, auto-submit, reply completion, approval pauses, Stop, denied permission and delayed microphone access.
+
 The UI smoke test imports and removes a synthetic note, creates and removes a routine, cancels a message plan, checks settings and responsive layout, and captures screenshots under `/tmp/apple-*.png`. It never sends a message or executes a desktop action. Model-dependent unit tests use deterministic mocked model responses. Real model quality, live WhatsApp delivery, and macOS Accessibility interactions require testing on your configured machine.
+
+The minimalist voice workspace uses Motion for React (formerly Framer Motion), a custom APPLE mark and real Web Audio amplitude. Animations respect reduced-motion preferences.

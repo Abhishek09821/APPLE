@@ -8,15 +8,18 @@ async def main():
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         page = await browser.new_page(viewport={'width': 1440, 'height': 960}, device_scale_factor=1)
+        await page.add_init_script("localStorage.setItem('apple-voice', 'false')")
         errors = []
         page.on('pageerror', lambda error: errors.append(str(error)))
         await page.goto('http://127.0.0.1:8000')
-        await page.get_by_text('System connected', exact=True).wait_for()
+        await page.get_by_role('heading', name='At your service.', exact=True).wait_for()
         await page.screenshot(path='/tmp/apple-desktop.png', full_page=True)
         await page.get_by_role('button', name='Knowledge library', exact=False).click()
+        for button in await page.get_by_role('button', name='Remove APPLE UI test notes.txt from library', exact=True).all():
+            await button.click()
         await page.locator('input[type=file]').set_input_files({'name': 'APPLE UI test notes.txt', 'mimeType': 'text/plain', 'buffer': b'Gravity attracts objects. Photosynthesis converts light to chemical energy.'})
         await page.get_by_text('APPLE UI test notes.txt', exact=True).wait_for()
-        await page.get_by_role('button', name='Ask', exact=True).click()
+        await page.locator('.document-row').filter(has_text='APPLE UI test notes.txt').get_by_role('button', name='Ask', exact=True).click()
         await page.get_by_text('Asking about APPLE UI test notes.txt').wait_for()
         await page.get_by_role('button', name='Remove document context').click()
         await page.get_by_role('textbox', name='Message APPLE').fill('WhatsApp UI Test Contact: This should never send')
