@@ -1,0 +1,221 @@
+.welcome-dialog {
+  width: min(620px, calc(100% - 32px));
+  max-height: calc(100dvh - 40px);
+  margin: auto;
+  padding: 0;
+  overflow-y: auto;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1.5px solid var(--ink);
+  border-radius: 8px;
+  box-shadow: 8px 8px 0 #181d1680;
+}
+.welcome-dialog::backdrop {
+  background: #161c2066;
+  backdrop-filter: blur(6px);
+}
+.welcome-topline {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid var(--line);
+  padding: 20px 30px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.welcome-brand {
+  font-weight: 750;
+  letter-spacing: 0.07em;
+  color: var(--ink);
+}
+.welcome-topline button {
+  color: var(--ink);
+  font-size: 12px;
+  padding: 6px 0;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.welcome-content {
+  padding: 35px 38px;
+}
+.welcome-sticker {
+  display: inline-block;
+  padding: 9px 16px;
+  background: #e7e0f3;
+  color: #242822;
+  border: 1.5px solid #242822;
+  border-radius: 4px;
+  font:
+    italic 24px/1.2 Georgia,
+    serif;
+  transform: rotate(-5deg);
+  margin: 0 0 22px;
+}
+.welcome-content h1 {
+  margin: 0 0 17px;
+  font-size: 38px;
+  font-weight: 650;
+  letter-spacing: -0.035em;
+  line-height: 1.12;
+  overflow-wrap: anywhere;
+}
+.welcome-content h1:focus {
+  outline: none;
+}
+.welcome-content > p {
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--secondary);
+}
+.welcome-content form {
+  margin: 28px 0 23px;
+}
+.welcome-content label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 9px;
+}
+.welcome-content input {
+  display: block;
+  width: 100%;
+  padding: 14px;
+  border: 1.5px solid var(--ink);
+  border-radius: 4px;
+  background: var(--canvas);
+  color: var(--ink);
+  font-size: 17px;
+  margin-bottom: 20px;
+}
+.welcome-content input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.welcome-content .welcome-note {
+  font-size: 12px;
+  line-height: 1.8;
+  color: var(--muted);
+}
+.welcome-content .welcome-error {
+  color: var(--danger);
+  margin: 12px 0;
+  font-size: 13px;
+}
+.tour-icon {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border: 1.5px solid #242822;
+  border-radius: 7px;
+  color: #242822;
+  margin: 0 0 24px;
+}
+.tour-icon.green {
+  background: #deebbe;
+}
+.tour-icon.violet {
+  background: #e7e0f3;
+}
+.tour-steps {
+  counter-reset: tour;
+  list-style: none;
+  padding: 0;
+  margin: 25px 0;
+}
+.tour-steps li {
+  position: relative;
+  padding-left: 34px;
+  margin-bottom: 18px;
+  counter-increment: tour;
+}
+.tour-steps li:before {
+  content: counter(tour);
+  position: absolute;
+  top: 1px;
+  left: 0;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 650;
+}
+.tour-steps b {
+  display: block;
+  font-size: 13px;
+  line-height: 1.6;
+  font-weight: 650;
+}
+.tour-steps span {
+  display: block;
+  font-size: 12px;
+  color: var(--secondary);
+  line-height: 1.8;
+  margin-top: 4px;
+}
+.tour-example {
+  margin: 20px 0;
+  border: 1.5px solid #242822;
+  border-radius: 4px;
+  padding: 17px 20px;
+  background: #e3edc8;
+  color: #242822;
+  font-size: 17px;
+  font-weight: 550;
+}
+.tour-example.violet {
+  background: #e7e0f3;
+}
+.tour-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 18px;
+  margin-top: 28px;
+}
+.tour-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-right: auto;
+  font-size: 13px;
+}
+.welcome-content .tour-replay {
+  text-align: right;
+  margin-top: 20px;
+  font-size: 11px;
+  color: var(--muted);
+}
+@media (max-width: 540px) {
+  .welcome-dialog {
+    max-height: calc(100dvh - 24px);
+  }
+  .welcome-topline {
+    padding: 16px 21px;
+  }
+  .welcome-content {
+    padding: 26px 23px;
+  }
+  .welcome-content h1 {
+    font-size: 31px;
+  }
+  .welcome-content > p {
+    font-size: 14px;
+  }
+  .tour-example {
+    font-size: 15px;
+  }
+  .tour-actions {
+    flex-wrap: wrap;
+  }
+}
+.welcome-content label {
+  color: var(--ink);
+}
+.welcome-content input:focus {
+  border-color: var(--accent) !important;
+}

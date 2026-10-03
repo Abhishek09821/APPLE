@@ -48,9 +48,9 @@ export default function LibraryView({
       <div className="page-heading">
         <span className="eyebrow">KNOWLEDGE THAT STAYS WITH YOU</span>
         <h1>
-          Your second brain<span>.</span>
+          Your documents<span>.</span>
         </h1>
-        <p>Add your reading. Ask better questions. Make it stick.</p>
+        <p>Add notes, ask questions, or practise out loud.</p>
       </div>
       {quiz ? (
         <div className="quiz-panel">
@@ -158,9 +158,7 @@ export default function LibraryView({
             <span className="upload-icon">
               {working ? <Loader2 className="spin" size={25} /> : <Upload size={25} />}
             </span>
-            <strong>
-              {working ? 'Working with your document…' : 'Drop a little knowledge here'}
-            </strong>
+            <strong>{working ? 'Working with your document…' : 'Add a document'}</strong>
             <span>Choose a file or drag it in · PDF, DOCX, TXT, MD · up to 20 MB</span>
             <span className="upload-link">
               Browse files <ArrowUpRight size={13} />

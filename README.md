@@ -1,130 +1,199 @@
-# APPLE · Your local desktop assistant
+<div align="center">
 
-A rebuilt macOS assistant with a responsive command center, local AI conversations, spoken replies, real computer actions, a document library, study quizzes, and routines you can teach.
+# APPLE
 
-There is no simulated execution mode. Offline connections, unsupported actions, failed steps, and uncertain message delivery are shown honestly.
+**Your Mac. A little less back-and-forth.**
 
-## Start
+A personal macOS assistant for spoken conversations, everyday computer tasks, WhatsApp messages, and learning from your own documents.
 
-Requires macOS, Python 3.10+, and Node.js 22.12+ (or 24+).
+[Quick start](#quick-start) · [First visit](#first-visit) · [WhatsApp](#whatsapp-messages) · [Library](#learn-from-your-documents) · [Development](#development) · [Contact](#contact)
+
+**macOS** · **React + FastAPI** · **Local Ollama** · **[MIT license](LICENSE)**
+
+</div>
+
+![APPLE’s neo-brutalist landing page, with a slim navbar and examples of everyday requests](docs/images/home.png)
+
+APPLE is an independent project by **Abhishek Tiwari**, not affiliated with Apple Inc.
+
+## What’s new
+
+- A slim text navbar with a compact mobile menu, consistent page margins, and light/dark themes.
+- A new landing page with warm paper colors, bold borders, and straightforward examples.
+- A **name-only welcome** that remembers your name across conversations and restarts. No email or password.
+- A skippable introduction to **WhatsApp contacts** and the **document library**, replayable from Settings.
+- **Silent scrolling**, with optional quieter click sounds. Interface sounds pause during voice sessions.
+- Searchable activity with individual, selected, and complete history deletion.
+- A movable floating assistant in desktop Chrome, sharing the main app’s voice session.
+
+## A look inside
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/assistant.png" alt="APPLE voice workspace with microphone controls and the current user’s name" /><br /><strong>The voice workspace</strong><br />Talk, type, or keep the assistant in a floating window.</td>
+    <td width="50%"><img src="docs/images/library.png" alt="Document library with a sample revision document" /><br /><strong>Your document library</strong><br />Ask about a document or practise with a spoken lesson.</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/images/welcome.png" alt="The welcome screen asks only for your name" /><br /><strong>A quick hello</strong><br />One name, saved locally.</td>
+    <td width="50%"><img src="docs/images/whatsapp-tour.png" alt="Welcome tutorial explaining how to save and message a WhatsApp contact" /><br /><strong>A useful first-run tour</strong><br />Learn where things are. Skip whenever you want.</td>
+  </tr>
+</table>
+
+<details>
+<summary>Dark appearance, mobile layout, and the library tutorial</summary>
+
+![Dark appearance](docs/images/home-dark.png)
+
+<p align="center"><img src="docs/images/home-mobile.png" width="300" alt="APPLE’s responsive mobile landing page" /> <img src="docs/images/library-tour.png" width="440" alt="The library tutorial explains uploads, document questions, and voice lessons" /></p>
+
+</details>
+
+*Screenshots show the running interface with demonstration names and documents. They contain no private contacts, conversation history, or real message sends.*
+
+## Quick start
+
+You’ll need **macOS**, **Python 3.10+**, **Node.js 22.12+**, and **npm**. Use desktop Chrome for voice input and the floating companion.
 
 ```bash
-./setup.sh --desktop
-./start.sh --desktop
-```
-
-For a browser window instead:
-
-```bash
+git clone https://github.com/Abhishek09821/APPLE.git
+cd APPLE
 ./setup.sh
 ./start.sh
-# Open http://127.0.0.1:8000
 ```
 
-For frontend development, use `./start.sh --dev` and open `http://127.0.0.1:5173`. Stop with Ctrl+C. The native window reuses an existing local APPLE server. If it starts its own server, it shuts that server down when closed. Port 8000 must otherwise be available.
+Open **[http://127.0.0.1:8000](http://127.0.0.1:8000)**. Keep the server running; Ctrl+C stops it. Port 8000 must be available.
 
-### Connect local intelligence
+The setup script installs Python dependencies, Playwright Chromium, and frontend dependencies, then builds the interface.
 
-Install [Ollama](https://ollama.com/download/mac), then download a model suited to your Mac’s available memory. For example:
+### Connect a local model
+
+Install [Ollama for macOS](https://ollama.com/download/mac), then download a model that fits your Mac’s memory:
 
 ```bash
 ollama pull qwen3:8b
 ollama serve
 ```
 
-If the Ollama application already runs the server, you do not need a second `ollama serve`. In APPLE → Settings, select the exact installed model name and save. The status indicator distinguishes basic computer tools from a connected model. No model is bundled or silently downloaded. A model download can take several gigabytes.
+If the Ollama app already runs its server, skip the second command. In APPLE → **Settings**, select the exact downloaded model name and save.
 
-APPLE calls only the local Ollama endpoint at `127.0.0.1:11434`. The API uses [Ollama chat and JSON schemas](https://docs.ollama.com/capabilities/structured-outputs). No Gemini key or cloud AI account is required.
+APPLE uses Ollama at `127.0.0.1:11434`. No model is bundled or downloaded automatically. Basic app launches and searches can work without a model; conversations, document answers, and semantic grading need one.
 
-## Use it
+<details>
+<summary>Optional native desktop window</summary>
 
-| Request | What happens |
+```bash
+./setup.sh --desktop
+./start.sh --desktop
+```
+
+The pywebview window reuses an existing local server or starts its own. It closes a server it started when you exit. Voice recognition and Document Picture-in-Picture depend on browser support; use desktop Chrome for the full voice and floating-window experience.
+
+</details>
+
+## First visit
+
+1. Enter the name you’d like APPLE to use. That is the whole welcome form.
+2. Follow the two short tutorials: saved WhatsApp contacts, then the document library. **Skip tour** is available on either step.
+3. Open Assistant and choose **Start listening**, or type a request.
+
+Your name and tour completion are stored in the local database. The name is included in future conversational and document-answer context. Asking **“What is my name?”** works without a model. Change it under **Settings → A name to remember**, or choose **Replay welcome tour**.
+
+This is one shared local workspace. The name personalizes it; it is not authentication or a separate account for each person.
+
+## Things to try
+
+| Say or type | What APPLE does |
 | --- | --- |
-| `Open Chrome` / `Open Notes` / `Open camera` | Resolves an installed app, including common aliases and portable apps |
-| `List my apps` | Shows the discovered app inventory |
-| `Search Bluetooth in System Settings` | Searches an installed app through its native controls |
-| `Inspect Calculator` | Reads the app’s exposed controls |
-| `Click plus in Calculator` | Resolves the spoken label to the visible native Add button |
-| `Remember that I prefer short explanations` | Saves an explicit fact for future sessions |
-| `Open https://example.com` | Opens an HTTP(S) website |
-| `Search for orbital mechanics` | Opens search results in the browser |
-| `Search YouTube for piano music` | Opens YouTube search |
-| `Find file biology.pdf` | Searches the local Spotlight index |
-| `Open file ~/Documents/notes.pdf` | Opens a document or image inside your home folder |
-| `Create folder Revision` | Creates the folder on your Desktop |
-| `Learn ~/Documents/biology.pdf` | Imports the document and selects it for follow-up questions |
-| `Open Rahul chat in WhatsApp` | Finds an exact, unique chat in the installed WhatsApp Mac app |
-| `WhatsApp Rahul: I will be there at 7` | Resolves a saved contact alias and attempts native sending |
-| `Mummy ko hii bhejo` | Uses Mummy’s saved international phone number |
-| `Run shortcut Focus time` | Reviews and runs an existing macOS Shortcut |
-| `Run My morning` | Runs a routine saved in My routines |
+| `Open Notes` | Finds and opens the installed app. |
+| `Find file biology.pdf` | Searches the local Spotlight index. |
+| `Search Bluetooth in System Settings` | Attempts a search through the app’s native controls. |
+| `Inspect Calculator` | Reads available native controls. |
+| `WhatsApp Mum: I’m on my way.` | Resolves a saved contact and attempts a verified native send. |
+| `Mummy ko hii bhejo` | Uses Mummy’s saved name or alias. |
+| `Remember that I prefer short explanations` | Saves an explicit fact for future conversations. |
+| `Learn ~/Documents/biology.pdf` | Imports the document for questions and study. |
+| `Run My morning` | Runs a routine you saved in Routines. |
+| `Run shortcut Focus time` | Runs an existing macOS Shortcut after the applicable review. |
 
-With a model connected, you can have conversations, phrase requests naturally, give multiple steps, and ask contextual follow-up questions within the current session. The model can only select validated, supported tools. It cannot execute arbitrary shell commands or invent new automation capabilities.
+### WhatsApp messages
 
-### Voice
+1. Install and sign in to the **WhatsApp Mac app**.
+2. Open **Settings → WhatsApp contacts**. Enter the exact name shown in the chat, an international phone number including country code, and optional **Voice aliases** such as `Mum` or `Mummy`.
+3. Allow APPLE’s launching application—Terminal, Codex, or Python as listed—in **System Settings → Privacy & Security → Accessibility**.
+4. Say **“WhatsApp Mum: I’m on my way.”**
 
-Spoken replies are synthesized locally with macOS `say` and the system’s default voice, then played in the browser through Web Audio. Microphone and playback amplitude drive the icon, glow and voice meter in real time; silence settles the meter. Emoji, raw URLs and Markdown are excluded from speech. Long replies stay on screen while the voice reads a concise version. Toggle them in the top bar, read an individual reply aloud, or adjust the speaking rate in Settings. Stop interrupts speech and active commands.
+Saved contacts let APPLE resolve the recipient without asking the model to guess a number. The native adapter checks the recipient, edits the composer, presses a verified Send control once, and looks for the outgoing message. It uses the installed app, with no browser fallback. An outgoing message appearing in the UI is not proof of delivery.
 
-Choose **Start listening**, allow the microphone, and speak naturally. Final speech submits automatically; no Send or Enter is needed. **Settings → Spoken language** offers English (India), Hindi, English (US), and English (UK); the choice saves in this browser. Positively reported low-confidence transcripts ask you to repeat instead of executing.
+One-time **Trusted automation** allows supported actions and messages you request to run without repeated in-app approval. Leave it off to review applicable actions first. Revoke it in Settings at any time. Browser microphone and macOS Accessibility permissions are separate.
 
-On supported desktop Chrome versions, the recognizer consumes the same echo-cancelled microphone track as the visualizer. APPLE requests cancellation of all speaker output. If the browser confirms that mode, new speech interrupts playback and the final words submit your next request. Otherwise recognition pauses before playback and resumes after its acoustic tail; **Interrupt** stops the reply and resumes listening. Echo filtering uses the exact cleaned speech, including generated phrases, and retains recent replies to reject delayed transcripts. See [recognition audio tracks](https://developer.mozilla.org/en-US/docs/Web/API/SpeechRecognition/start) and [Chrome speaker echo cancellation](https://developer.chrome.com/release-notes/141#echocancellationmode_for_getusermedia).
+If a send is uncertain, inspect the chat before retrying. An identical draft can be reused on an explicit retry. Multiline sends are currently rejected before typing, and WhatsApp updates can affect native control support.
 
-Common spoken app/search/WhatsApp commands bypass model inference. Qwen3 uses non-thinking mode with a smaller context and stays loaded for fifteen minutes after use. Listening pauses while a command or grade is being computed and while a plan needs on-screen confirmation. **End session** releases the microphone; **Stop** cancels pending work and speech. Typed requests remain available. Browser dictation may require internet and transmit audio to the browser provider. Native spoken replies are local. System-wide wake words and offline speech recognition are not implemented.
+### Learn from your documents
 
-### WhatsApp and typing
+Open **Library** and upload a **PDF, DOCX, TXT, or Markdown** file. You can also drag a file in, enter its local path, or use a `Learn …` command.
 
-In **Settings → WhatsApp contacts**, save the exact WhatsApp display name, international phone number (for example `+91…`) and voice aliases such as `Mummy, Mom, माँ`. You can add, edit and remove contacts; they persist locally. Duplicate numbers and conflicting aliases are rejected. Spoken aliases resolve to the saved number without guessing a recipient. `Send hii to Mummy` and `Mummy ko hii bhejo` use that same saved entry.
+- **Ask** selects the document for follow-up questions with source references.
+- **Teach me aloud** asks a short question, accepts a spoken or typed answer, explains the result, and moves to the next question.
+- **Quiz me** provides a written practice session with grading.
+- **Teach me after upload** starts a voice lesson automatically. Switch it off in Settings if you prefer.
 
-WhatsApp opens the saved number directly in the installed Mac app, bypassing contact search. Before editing or sending, it verifies the chat against the saved display name or number and preserves drafts that differ from your requested message. An explicit retry can reuse an exactly matching draft. Composer text uses native Unicode input events so WhatsApp activates its real Send button; sending waits for that visible control and presses it once. Multiline messages are currently rejected before typing. Without a saved entry it can try the native contact picker, but an unknown or ambiguous name stops with an explanation. There is no browser fallback. An outgoing message appearing in the native UI is reported separately from delivery; check the chat before retrying an uncertain send. Native app updates can change its Accessibility layout.
+Say **“repeat question”** or **“end lesson”** during a voice lesson. Prepared questions are cached for the current document and model, so practising again starts a fresh score without regenerating the questions. Unusable generated questions fall back to a labelled source-review exercise.
 
-One-time setup offers **Trusted automation**, which allows your requested supported actions and messages to run without repeated in-app confirmation. The choice persists and can be revoked in Settings. Without that opt-in, reviewed plans expire after ten minutes and approvals are single-use. macOS Accessibility and browser microphone permissions are separate and cannot be silently granted by APPLE.
+Imports support up to **20 MB**, **1,000 PDF pages**, and **3 million extracted characters**. Unlock encrypted PDFs first; scanned image-only documents need OCR. DOCX references use sections unless explicit page breaks are available. Answers and grades can be wrong—check the cited source.
 
-Explicit typing/key actions support Notes, TextEdit, Messages, WhatsApp, Mail, and Slack. Open the app and choose the destination text field first. Grant the launching terminal/Python app Accessibility permission in System Settings → Privacy & Security when needed. APPLE verifies the focused application, but cannot identify an arbitrary focused field. Typing and key presses use the same trusted-automation preference. Use a named macOS Shortcut for more specialized app behavior.
+This is document retrieval, not model training. Removing a document deletes its index, not the original file. Historical answers and saved practice sessions can remain.
 
-### Learn from documents
+### Voice and the floating companion
 
-Import a PDF, DOCX, UTF-8 TXT, or Markdown file in Knowledge library, drag it in, paste its local path, or use `Learn ~/Documents/file.pdf`. Imports support up to 20 MB, 1,000 PDF pages, and three million extracted characters. Encrypted PDFs must be unlocked; scanned documents require OCR first.
+Choose **Start listening** and allow microphone access. Final recognized speech submits automatically. Replies use macOS speech synthesis, and the APPLE mark responds to measured audio.
 
-Uploads start a **Voice teacher** lesson by default: APPLE asks a question aloud, accepts a spoken or typed answer, explains whether it is correct, and advances to the next question. It announces the final score. Lessons use up to three short questions, validated against exact source text. Invalid generated items are discarded individually; if none are usable, a labelled source-review exercise uses statements copied from the document. Prepared questions are cached for this document and model, so **Practice again** creates a fresh score immediately without regenerating questions. Changing the source or model invalidates the cache; deleting the document removes it. Closing a lesson cancels unfinished generation/grading requests. Say “repeat question” or “end lesson”; you can also use **Teach me aloud** on an existing document. Disable **Teach me after upload** in Settings to import without starting a lesson.
+When the browser supports speaker echo cancellation, speaking during a reply can interrupt it. Otherwise, APPLE pauses recognition during playback and provides an **Interrupt** button. Say **“stop listening”** or use **Stop** to end the session. Recognition accuracy depends on your browser, language setting, microphone, and surroundings.
 
-All extracted pages are indexed in local SQLite storage. Questions retrieve relevant excerpts and include page references. “Quiz me” samples excerpts across the document, generates questions, hides reference answers, grades your responses, and shows a session score. You can also ask the conversational tutor to question you one prompt at a time. Natural-language question generation and semantic grading use your local model and can contain mistakes; use the source references to check them.
+In desktop Chrome, choose **Float assistant** in the navbar. Drag its title bar to position it above other applications. It shares the existing microphone session, responses, and Stop control. Keep the original APPLE tab open. Closing the companion ends listening and speech; **Return to APPLE** keeps the voice session going.
 
-This is document retrieval and persistent reference knowledge, not model-weight training. A retrieved answer does not necessarily consider every page at once. Deleting a library entry removes the index, not the original file. Historical answers and saved practice sessions remain in the local database.
+Click sounds are optional and off by default for new browser profiles. **Scrolling never plays a sound.** Animations follow the system’s reduced-motion preference.
 
-### Teach a routine
+### History, memories, and routines
 
-In My routines, choose a name and enter one command per line. Routines persist across restarts. Say `Run <name>` to use one. All steps are planned and validated before execution; execution stops at the first failed step. Plans containing sends, typing, key presses, or Shortcuts require review unless trusted automation is enabled. Use a named macOS Shortcut for actions beyond the built-in adapters.
+**Activity** shows the 100 most recent entries. Search, delete one, select several, or clear all activity, including older entries. Deletion requires an inline confirmation and removes those records from future conversation context. It does not delete your name, contacts, documents, explicit memories, study sessions, or messages already sent.
 
-## Boundaries
+Use **“Remember that…”** to save an explicit fact. Review and forget those facts in Settings. In **Routines**, give a workflow a name and enter one command per line. Say **“Run [name]”** to use it. Execution stops at the first failed step.
 
-APPLE discovers installed applications and can inspect, search, click and fill controls exposed through macOS Accessibility. Multi-step app tasks use an inspect–act–inspect loop with up to six actions and require visible evidence before reporting completion. Some apps do not expose usable controls; those tasks stop with a concrete explanation. It does not have unrestricted control of every laptop application. It does not have arbitrary screen vision, click-anything navigation, automatic skill installation, OCR, model fine-tuning, wake-word listening, or background scheduled jobs. Search tools open results; they do not browse and summarize the web. Stop prevents further work but cannot undo an action already completed or reliably revoke work a separate application has already accepted.
+## Privacy and current limits
 
-The old demo responses, brittle notification toggles, and nonpersistent scheduled-job implementation were removed. Old JSON history remains untouched; new activity is stored in SQLite. Existing Gemini configuration is no longer used.
+- Profile, history, document text, contacts, memories, routines, and settings are stored locally in `backend/data/apple.db`. Browser appearance and sound preferences use local storage.
+- Model reasoning and Mac speech synthesis run locally. **Browser dictation may send microphone audio to its speech provider.** Searches, external links, and requested messages use online services.
+- The database is not encrypted by APPLE. Your Mac account, file permissions, and disk protection control access. The server binds to loopback, validates host/origin, and requires a process token for mutations; do not expose it publicly.
+- APPLE can work only with supported tools and controls exposed through macOS Accessibility. Some native apps and web apps do not expose usable controls.
+- There is no arbitrary shell execution, universal screen control, wake-word listener, OCR, automatic skill installation, or model fine-tuning. Search tools open results; they do not browse and summarize every page.
+- **Stop** prevents further work but cannot undo completed actions or reliably revoke work already accepted by another application.
 
-## Architecture
+Read the in-app **Privacy policy** and **FAQs** from the navbar or footer for more detail.
 
-- `frontend/src/App.jsx`: session orchestration, voice input, streaming execution, navigation.
-- `frontend/src/components/`: document, study, routine, activity, settings views and shared UI.
-- `backend/main.py`: loopback API, stream lifecycle, single-use approvals, API authentication, native speech.
-- `backend/models.py`: validated settings and bounded action-plan schemas.
-- `backend/ai_parser.py`: explicit offline commands and local Ollama reasoning.
-- `backend/executor.py`: asynchronous macOS actions.
-- `backend/desktop_apps.py`, `desktop_automation.py`, `desktop_ax.js`: installed app inventory and native control adapters.
-- `backend/app_agent.py`: bounded, observed multi-step app automation.
-- `backend/contacts.py`: saved WhatsApp numbers and voice aliases.
-- `backend/memory.py`: explicit persistent user facts.
-- `backend/whatsapp_native.py`: verified native WhatsApp control.
-- `backend/whatsapp_ax.js`: bounded native Accessibility bridge using macOS automation permissions.
-- `backend/speech.py`: concise narration and local PCM speech synthesis.
-- `backend/knowledge.py`: PDF extraction, local retrieval, question generation and grading.
-- `backend/storage.py`: transactional SQLite persistence.
-- `backend/desktop.py`: optional native pywebview window.
+## Development
 
-Local data is stored under `backend/data/apple.db`. Older `whatsapp-profile/` folders are not used by the native adapter. Set `APPLE_DATA_DIR` to a separate directory for isolated tests. The local database contains private conversations and document text; it is not encrypted by the app. Standard system account and disk protection apply.
+```bash
+./start.sh --dev
+# Frontend: http://127.0.0.1:5173
+# Backend:  http://127.0.0.1:8000
+```
 
-The server binds to loopback, validates host/origin, and requires a process-scoped token for mutations. Personal records stay local; explicitly requested web navigation and messaging use the internet. Do not expose the backend to a network or run untrusted applications under the same account.
+| Location | Responsibility |
+| --- | --- |
+| `frontend/src/App.jsx` | Sessions, navigation, profile, voice, and command orchestration. |
+| `frontend/src/components/` | Landing page, welcome tour, assistant, library, activity, and settings. |
+| `frontend/src/hooks/` | Recognition, playback, floating window, preferences, and optional click feedback. |
+| `backend/main.py` | Loopback API, streaming execution, approvals, and lifecycle. |
+| `backend/user_profile.py` | Validated display name, tour state, and personalization context. |
+| `backend/ai_parser.py` | Explicit command parsing and local model plans. |
+| `backend/desktop_automation.py`, `backend/app_agent.py` | Native Accessibility controls and bounded multi-step app tasks. |
+| `backend/contacts.py`, `backend/whatsapp_native.py` | Saved recipients and verified native WhatsApp actions. |
+| `backend/knowledge.py` | Document extraction, retrieval, questions, and grading. |
+| `backend/storage.py`, `backend/memory.py` | SQLite persistence and explicit user memories. |
 
-## Verification
+Set `APPLE_DATA_DIR` to a separate directory when working with test data. Do not commit personal database files or contact information.
+
+### Checks
 
 ```bash
 .venv/bin/python -m unittest discover -s backend/tests -v
@@ -132,34 +201,30 @@ cd frontend
 npm test
 npm run build
 npm run format:check
-npm audit
 ```
 
-With the local app running and Playwright Chromium installed:
+With the local server running and Playwright Chromium installed, run from the repository root:
 
 ```bash
+.venv/bin/python backend/tests/onboarding_smoke.py
+.venv/bin/python backend/tests/product_smoke.py
+.venv/bin/python backend/tests/voice_smoke.py
+.venv/bin/python backend/tests/contacts_smoke.py
 .venv/bin/python backend/tests/browser_smoke.py
-# Optional native window check (opens and automatically closes a window):
-.venv/bin/python backend/tests/desktop_smoke.py
 ```
 
-The voice browser test (`backend/tests/voice_smoke.py`) uses synthetic microphone and PCM audio to verify the shared recognition track, amplitude/silence synchronization, delayed echo rejection, both full-duplex and turn-taking capability branches, interruption, automatic submission, microphone release, hidden navigation and a complete upload-to-spoken-lesson workflow. Recognition and capability responses are fixtures; this does not measure real microphone transcription accuracy or acoustic cancellation quality. `contacts_smoke.py` verifies the contact form with isolated fixtures; no actual contacts or messages are used.
+The onboarding test checks name entry, failed-save recovery, tour skipping/replay, all page widths, and mobile navigation. It regenerates the screenshots in `docs/images/` using isolated fixtures. Product tests cover silent scrolling, optional click feedback, history deletion, themes, and a real Chrome Picture-in-Picture window.
 
-The UI smoke test imports and removes a synthetic note, creates and removes a routine, cancels a message plan, checks settings and responsive layout, and captures screenshots under `/tmp/apple-*.png`. It never sends a message or executes a desktop action. Model-dependent unit tests use deterministic mocked model responses. Real model quality, live WhatsApp delivery, and macOS Accessibility interactions require testing on your configured machine.
+Voice checks use synthetic microphone audio and mocked recognition/model responses. They verify session behavior, interruption, audio-level motion, cleanup, and a complete document lesson—not real-world transcription or acoustic cancellation quality. The general browser smoke test creates and removes a temporary note and routine. No browser test sends a real message or runs desktop actions.
 
-The voice workspace uses Motion for React, a custom APPLE mark, an interactive ambient background and real Web Audio amplitude. Move to the top-center edge to reveal navigation, or focus/tap the navigation handle. Animations respect reduced-motion preferences.
+## Contact
 
+Built by **Abhishek Tiwari**.
 
-## Home, appearance and the floating companion
+- [Email / support](mailto:abhishek.tiwarii9821@gmail.com)
+- [LinkedIn](https://www.linkedin.com/in/abhishek-tiwari-3a3594300/)
+- [Report an issue](https://github.com/Abhishek09821/APPLE/issues)
 
-The local root page opens the product introduction. Use `http://127.0.0.1:8000/#assistant` to open the voice workspace directly. About, Contact & support, FAQs and Privacy policy are separate hash routes, linked in the full-width navigation and footer. The contact page links to Abhishek Tiwari’s supplied email and LinkedIn profile; it does not submit a form or send email automatically. These pages are served locally, not published to the internet.
+For a bug report, include your macOS/browser versions, steps to reproduce, and the result you expected. Remove private contacts, messages, and document contents from screenshots.
 
-Use the sun/moon button or Settings to choose light or dark appearance. Theme, interface-sound switch and sound volume persist in this browser. Short, generated sound cues respond to clicks, controls and scrolling; scroll cues are throttled, and all interface sounds pause during a voice session or spoken reply. Animations respect the system’s reduced-motion preference. The **Conversational expression** setting lets the model use occasional natural “hmm” or “yeah”; save settings to apply it. Speech remains the installed macOS voice, so available vocal expression depends on that voice.
-
-In desktop Chrome, choose **Float assistant** from the top bar or Settings. The companion uses the [Document Picture-in-Picture API](https://developer.chrome.com/docs/web-platform/document-picture-in-picture) to open a real window above other applications, with the same microphone session, audio meter, reply and Stop control. Drag its title bar to position it; Chrome manages its size and remembered position. Keep the original APPLE tab open. **Return to APPLE** preserves the session; closing the companion ends listening and speech. Other browsers and the optional WebKit desktop wrapper show a capability message rather than pretending to provide an always-on-top window.
-
-## Manage activity history
-
-Activity supports searching the 100 most recent entries, deleting one entry, selecting several entries (including across a search), and clearing all activity, including older entries. Deletion has an inline confirmation and permanently removes those records from the local database and future conversation context. It does not remove imported documents, saved contacts, explicit memories, study sessions or messages already sent to other apps. These have separate controls where provided. Clearing the current conversation’s records also resets its visible messages.
-
-`backend/tests/test_history.py` checks deletion scope, authentication, input limits, records beyond the visible page, and subsequent model context with a disposable database. `backend/tests/product_smoke.py` checks the new pages, contact links, themes, sound feedback, history selection, mobile layout and a real Chrome floating window. All API responses and voice transcripts in that browser test are fixtures; it uses synthetic microphone input and does not change personal history or send messages.
+Released under the [MIT License](LICENSE).

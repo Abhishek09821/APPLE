@@ -24,6 +24,7 @@ from desktop_automation import permissions_status
 from executor import process
 from contacts import Contact, save_contact, resolve_whatsapp_action
 from app_agent import automate_app
+from user_profile import UserProfile, current_profile, save_profile
 
 TOKEN = secrets.token_urlsafe(32)
 PENDING = {}
@@ -70,7 +71,17 @@ async def input_error(request, exc):
 @app.get('/api/status')
 async def status():
     return {'status': 'online', 'token': TOKEN, 'platform': platform.system(), 'ai': await model_status(),
-            'settings': settings().model_dump(), 'tasks_run': len(list_records('history', 10000))}
+            'settings': settings().model_dump(), 'profile': current_profile(), 'tasks_run': len(list_records('history', 10000))}
+
+
+@app.get('/api/profile')
+async def get_profile():
+    return current_profile()
+
+
+@app.put('/api/profile')
+async def update_profile(value: UserProfile):
+    return save_profile(value)
 
 
 @app.get('/api/settings')

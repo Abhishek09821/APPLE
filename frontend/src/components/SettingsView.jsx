@@ -11,9 +11,13 @@ import {
 } from 'lucide-react'
 import { api } from '../utils/api'
 import SavedContacts from './SavedContacts'
+import ProfileCard from './ProfileCard'
 
 export default function SettingsView({
   status,
+  profile,
+  onSaveProfile,
+  onTour,
   model,
   setModel,
   refresh,
@@ -53,6 +57,7 @@ export default function SettingsView({
         </h1>
         <p>Connect your local intelligence and find your voice.</p>
       </div>
+      <ProfileCard profile={profile} onSave={onSaveProfile} onTour={onTour} />
       <div className="settings-card">
         <h3>Make it feel like you</h3>
         <p className="field-hint">
@@ -79,7 +84,10 @@ export default function SettingsView({
         <div className="setting-row">
           <div>
             <strong>Interface sounds</strong>
-            <p>Soft feedback on clicks, controls and scrolling. Quiet during voice sessions.</p>
+            <p>
+              Optional, quiet taps on buttons and controls. Scrolling is always silent; voice
+              sessions stay quiet too.
+            </p>
           </div>
           <button
             className={`toggle ${preferences.sounds ? 'on' : ''}`}

@@ -11,7 +11,7 @@ async def main():
         async def route(request):
             path = request.request.url.split('/api')[-1]
             method = request.request.method
-            if path == '/status': return await request.fulfill(json={'token':'fixture','ai':{'ready':True,'models':['test']},'settings':{'model':'test','speech_rate':175,'setup_completed':True,'automation_enabled':False,'auto_tutor':True}})
+            if path == '/status': return await request.fulfill(json={'token':'fixture','ai':{'ready':True,'models':['test']},'profile':{'name':'Test User','tutorial_completed':True},'settings':{'model':'test','speech_rate':175,'setup_completed':True,'automation_enabled':False,'auto_tutor':True}})
             if path == '/permissions': return await request.fulfill(json={'accessibility':True})
             if path in ['/documents','/routines','/history','/memories']: return await request.fulfill(json=[])
             if path.startswith('/contacts'):
@@ -24,8 +24,8 @@ async def main():
             return await request.fulfill(status=400,json={'detail':'Unexpected request'})
         await page.route('**/api/**',route)
         await page.goto('http://127.0.0.1:8000/#assistant')
-        await page.locator('.reveal-nav-trigger').focus()
-        await page.keyboard.press('ArrowDown')
+        if await page.locator('.global-nav-toggle').is_visible():
+            await page.get_by_role('button', name='Show navigation', exact=True).click()
         await page.get_by_role('button',name='Settings & connections',exact=True).click()
         panel=page.get_by_role('region',name='WhatsApp contacts')
         await panel.get_by_label('WhatsApp name',exact=True).fill('Test Mother')

@@ -7,6 +7,7 @@ import { MotionConfig, motion } from 'motion/react'
 import VoiceStage from './components/VoiceStage'
 import VoiceTutor from './components/VoiceTutor'
 import AutomationSetup from './components/AutomationSetup'
+import WelcomeFlow from './components/WelcomeFlow'
 import './tutor.css'
 import AmbientField from './components/AmbientField'
 import RevealNav from './components/RevealNav'
@@ -32,9 +33,6 @@ import {
   History,
   Home,
   Mail,
-  Moon,
-  Sun,
-  PictureInPicture2,
   Layers,
   Loader2,
   Mic,
@@ -99,6 +97,10 @@ export default function App() {
   const preferences = usePreferences()
   const isPublic = publicViews.includes(view)
   const [status, setStatus] = useState(null)
+  const [profile, setProfile] = useState(null)
+  const [tourOpen, setTourOpen] = useState(false)
+  const profileRevision = useRef(0)
+  const showWelcome = Boolean(profile && (!profile.name || !profile.tutorial_completed || tourOpen))
   const [connected, setConnected] = useState(false)
   const [messages, setMessages] = useState([initialMessage])
   const [input, setInput] = useState('')
@@ -164,6 +166,7 @@ export default function App() {
   const approvalPending = messages.some((m) => m.approval)
   const voiceSession = useVoiceSession({
     suspended:
+      showWelcome ||
       busy ||
       ['preparing', 'grading'].includes(tutor.lesson?.stage) ||
       approvalPending ||
@@ -207,6 +210,18 @@ export default function App() {
   function openFloating() {
     navigate('assistant')
     floating.open()
+  }
+  function openTour() {
+    voiceSession.stop()
+    tutor.stop()
+    floating.close(true)
+    setTourOpen(true)
+  }
+  async function saveProfile(value) {
+    profileRevision.current += 1
+    const saved = await api('/profile', { method: 'PUT', body: JSON.stringify(value) })
+    setProfile(saved)
+    return saved
   }
   useEffect(() => {
     const update = () => {
@@ -255,8 +270,10 @@ export default function App() {
 
   async function refresh() {
     try {
+      const revision = profileRevision.current
       const s = await api('/status')
       setStatus(s)
+      if (revision === profileRevision.current && s.profile) setProfile(s.profile)
       setConnected(true)
       const results = await Promise.allSettled([
         api('/documents'),
@@ -365,6 +382,7 @@ export default function App() {
     return stopped
   }
   function toggleSession() {
+    if (showWelcome) return
     audio.prepare().catch((e) => setError(e.message))
     if (voiceSession.enabled) {
       voiceSession.stop()
@@ -430,6 +448,7 @@ export default function App() {
     }
   }
   async function send(text = input) {
+    if (showWelcome) return
     if (!text.trim() || busyRef.current || approvalPending) return
     if (['question', 'answer'].includes(tutor.lesson?.stage)) {
       setInput('')
@@ -588,7 +607,17 @@ export default function App() {
         className={`app-shell console-shell ${isPublic ? 'public-shell' : ''} ${view === 'assistant' ? 'console-active' : ''}`}
       >
         <AmbientField audioLevel={audio.level} />
-        {!isPublic && status && !status.settings.setup_completed && (
+        {showWelcome && (
+          <WelcomeFlow
+            profile={profile}
+            onSave={saveProfile}
+            onFinish={(destination) => {
+              setTourOpen(false)
+              if (destination) navigate(destination)
+            }}
+          />
+        )}
+        {!showWelcome && !isPublic && status && !status.settings.setup_completed && (
           <AutomationSetup
             working={working}
             onChoose={(enabled) =>
@@ -611,21 +640,17 @@ export default function App() {
           view={view}
           navigation={navigation}
           onNavigate={navigate}
-          persistent={isPublic}
           theme={preferences.theme}
           onTheme={preferences.toggleTheme}
-          sounds={preferences.sounds}
-          onSounds={() => preferences.setSounds(!preferences.sounds)}
           onFloat={openFloating}
         />
 
         <main className="main-shell">
-          {isPublic ? (
-            <div className="public-nav-spacer" />
-          ) : (
+          <div className="global-nav-spacer" />
+          {!isPublic && (
             <header className="topbar">
               <div className="breadcrumb">
-                <strong className="console-wordmark">APPLE</strong>
+                <strong className="workspace-owner">{profile?.name || 'Your workspace'}</strong>
                 <span className="header-slash">/</span>
                 <span>{activeTitle}</span>
               </div>
@@ -639,15 +664,6 @@ export default function App() {
                     : 'Backend offline'}
                 </span>
                 <span className="top-divider" />
-                <IconButton label="Float assistant" onClick={openFloating}>
-                  <PictureInPicture2 size={17} />
-                </IconButton>
-                <IconButton
-                  label={`Switch to ${preferences.theme === 'dark' ? 'light' : 'dark'} theme`}
-                  onClick={preferences.toggleTheme}
-                >
-                  {preferences.theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
-                </IconButton>
                 <IconButton
                   label={voice ? 'Turn spoken replies off' : 'Turn spoken replies on'}
                   onClick={toggleVoice}
@@ -677,7 +693,14 @@ export default function App() {
           )}
           <div className="content-layout">
             <div className={`primary-content ${view === 'assistant' ? 'chat-content' : ''}`}>
-              {isPublic && <ProductPages view={view} navigate={navigate} />}
+              {isPublic && (
+                <ProductPages
+                  view={view}
+                  navigate={navigate}
+                  onTour={openTour}
+                  name={profile?.name}
+                />
+              )}
               {view === 'assistant' && (
                 <>
                   <div className="section-heading">
@@ -1006,6 +1029,9 @@ export default function App() {
 
               {view === 'settings' && (
                 <SettingsView
+                  profile={profile}
+                  onSaveProfile={saveProfile}
+                  onTour={openTour}
                   preferences={preferences}
                   onFloat={openFloating}
                   floatingSupported={floating.supported}

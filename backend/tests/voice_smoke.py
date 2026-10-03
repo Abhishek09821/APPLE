@@ -66,7 +66,7 @@ async def main(duplex=False):
                 path = route.request.url.split('/api')[-1]
                 if path == '/status':
                     return await route.fulfill(json={'token':'test-only','ai':{'ready':True,'models':['test']},
-                        'settings':{'model':'test','speech_rate':175,'automation_enabled':True,'setup_completed':True,'auto_tutor':True}})
+                        'profile':{'name':'Test User','tutorial_completed':True},'settings':{'model':'test','speech_rate':175,'automation_enabled':True,'setup_completed':True,'auto_tutor':True}})
                 if path in ['/history','/routines','/memories']: return await route.fulfill(json=[])
                 if path == '/documents':
                     if route.request.method == 'POST': docs.append(doc); return await route.fulfill(json=doc)
@@ -136,9 +136,10 @@ async def main(duplex=False):
             assert not await page.evaluate(ACTIVE)
             assert await page.evaluate("window.voiceInstances.every(r => !r.track || r.track.readyState === 'ended')")
 
-            # Navigation really starts hidden and is reachable by keyboard and hover.
-            await page.keyboard.press('Tab')
-            await page.get_by_role('button', name='Show navigation').focus()
+            # Desktop links are visible; narrow screens use the keyboard-accessible menu.
+            if await page.locator('.global-nav-toggle').is_visible():
+                await page.get_by_role('button', name='Show navigation').focus()
+                await page.keyboard.press('ArrowDown')
             await page.get_by_role('button', name='Knowledge library', exact=True).click()
             await page.locator('input[type=file]').set_input_files({'name':doc['name'],'mimeType':'text/plain',
                 'buffer':b'Plants use sunlight for energy. Gravity pulls objects toward Earth.'})

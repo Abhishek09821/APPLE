@@ -1,216 +1,151 @@
-.reveal-nav-region {
+.global-nav {
   position: fixed;
+  inset: 0 0 auto;
   z-index: 60;
-  top: 0;
-  left: 50%;
-  width: min(700px, calc(100% - 32px));
-  height: 91px;
-  transform: translateX(-50%);
-  pointer-events: none;
+  height: var(--nav-height);
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
 }
-
-.reveal-nav-region.is-open {
-  pointer-events: auto;
-}
-
-.reveal-nav-edge {
-  position: absolute;
-  top: 0;
-  left: -16px;
-  right: -16px;
-  height: 22px;
-  pointer-events: auto;
-}
-
-.reveal-nav-trigger {
-  position: absolute;
-  top: 0;
-  left: 50%;
-  transform: translateX(-50%);
+.global-nav-inner {
+  max-width: var(--page-width);
+  height: 100%;
+  margin: auto;
+  padding: 0 var(--page-gutter);
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 5px;
-  width: 70px;
-  height: 25px;
-  border-radius: 0 0 13px 13px;
-  color: #8c94a370;
-  background: #11151b52;
-  pointer-events: auto;
-  transition:
-    color 180ms,
-    background 180ms;
+  gap: 32px;
 }
-
-.reveal-nav-trigger:hover,
-.reveal-nav-trigger:focus-visible,
-.is-open .reveal-nav-trigger {
-  color: #d7dce8;
-  background: #202630b3;
+.global-brand {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+  color: var(--ink);
+  text-decoration: none;
 }
-
-.reveal-nav-handle {
-  display: block;
-  width: 21px;
-  height: 2px;
-  border-radius: 2px;
-  background: currentColor;
+.global-brand svg {
+  width: 25px;
+  height: 28px;
 }
-
-.reveal-nav-trigger svg {
-  transition: transform 180ms;
+.global-brand span {
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: 0.035em;
 }
-
-.is-open .reveal-nav-trigger svg {
-  transform: rotate(180deg);
+.global-nav-links {
+  display: flex;
+  justify-content: space-between;
+  flex: 1;
+  align-items: center;
+  gap: 17px;
 }
-
-.reveal-nav-panel {
-  position: absolute;
-  top: 29px;
-  left: 0;
-  right: 0;
+.global-nav-links button {
+  padding: 17px 0;
+  color: var(--secondary);
+  font-size: 11px;
+  line-height: 18px;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.global-nav-links button:hover,
+.global-nav-links button[aria-current='page'] {
+  color: var(--ink);
+}
+.global-nav-links button[aria-current='page'] {
+  font-weight: 750;
+}
+.global-nav-tools {
   display: flex;
   align-items: center;
   gap: 12px;
-  min-height: 56px;
-  padding: 7px 10px;
-  border: 1px solid #e3eaff14;
-  border-radius: 19px;
-  background: linear-gradient(140deg, #1b1f27e8, #101318ed);
-  box-shadow:
-    0 14px 50px #0007,
-    inset 0 1px 0 #ffffff08;
-  backdrop-filter: blur(24px) saturate(1.3);
-  -webkit-backdrop-filter: blur(24px) saturate(1.3);
-  transform-origin: center top;
 }
-
-.reveal-nav-brand {
+.global-nav-tools button {
   display: grid;
   place-items: center;
-  flex: 0 0 33px;
-  width: 33px;
-  height: 37px;
-  color: #e1e7f3;
-  border-radius: 11px;
+  width: 25px;
+  height: 36px;
+  color: var(--ink);
+  border-radius: 5px;
 }
-
-.reveal-nav-brand:hover {
-  background: #ffffff08;
+.global-nav-tools button:hover {
+  background: var(--wash);
 }
-
-.reveal-nav-brand svg {
-  width: 27px;
-  height: 27px;
+.global-nav-tools .global-nav-toggle {
+  display: none;
 }
-
-.reveal-nav-divider {
-  height: 20px;
-  width: 1px;
-  background: #ffffff0b;
+.global-nav :is(a, button):focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 3px;
 }
-
-.reveal-nav-items {
-  flex: 1;
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
-}
-
-.reveal-nav-item {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  min-width: 0;
-  min-height: 38px;
-  padding: 0 7px;
-  border-radius: 11px;
-  color: #949eaf;
-  font-size: 10px;
-  white-space: nowrap;
-  transition:
-    color 160ms,
-    background 160ms,
-    box-shadow 160ms;
-}
-
-.reveal-nav-item > span:not(.reveal-nav-active-dot) {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.reveal-nav-item:hover {
-  color: #e7edf9;
-  background: #c7d8ff08;
-}
-
-.reveal-nav-item.is-selected {
-  color: #eaf0fc;
-  background: #b6c8ea0d;
-  box-shadow: inset 0 0 0 1px #dce6ff0b;
-}
-
-.reveal-nav-active-dot {
-  position: absolute;
-  left: calc(50% - 1px);
-  bottom: 2px;
-  width: 2px;
-  height: 2px;
-  border-radius: 50%;
-  background: #c7d9fa;
-  box-shadow: 0 0 5px #bdccfa70;
-}
-
-@media (max-width: 650px) {
-  .reveal-nav-region {
-    width: calc(100% - 24px);
-    height: 101px;
+@media (max-width: 1000px) {
+  .global-nav-inner {
+    gap: 22px;
   }
-
-  .reveal-nav-trigger {
-    width: 72px;
-    height: 28px;
-  }
-
-  .reveal-nav-edge {
-    left: -12px;
-    right: -12px;
-    height: 17px;
-  }
-
-  .reveal-nav-panel {
-    top: 32px;
-    padding: 7px;
-    min-height: 62px;
-    border-radius: 19px;
-  }
-
-  .reveal-nav-brand,
-  .reveal-nav-divider {
+  .global-brand span {
     display: none;
   }
-
-  .reveal-nav-items {
-    gap: 3px;
-  }
-
-  .reveal-nav-item {
-    flex-direction: column;
-    gap: 5px;
-    height: 46px;
-    padding: 4px 1px 6px;
-    font-size: 9px;
-    border-radius: 12px;
+  .global-nav-links {
+    gap: 12px;
   }
 }
-
+@media (max-width: 820px) {
+  .global-nav-inner {
+    justify-content: space-between;
+  }
+  .global-brand span {
+    display: inline;
+  }
+  .global-nav-tools {
+    gap: 12px;
+  }
+  .global-nav-tools button {
+    height: 44px;
+    width: 30px;
+  }
+  .global-nav-tools .global-nav-toggle {
+    display: grid;
+  }
+  .global-nav-links {
+    display: none;
+  }
+  .menu-open .global-nav-links {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    position: absolute;
+    top: var(--nav-height);
+    left: 0;
+    right: 0;
+    padding: 18px var(--page-gutter) 26px;
+    gap: 0;
+    max-height: calc(100dvh - var(--nav-height));
+    overflow-y: auto;
+    background: var(--surface);
+    border-bottom: 1px solid var(--line);
+    box-shadow: 0 30px 60px #0002;
+    animation: nav-reveal 0.18s ease-out;
+  }
+  .global-nav-links button {
+    text-align: left;
+    padding: 10px 5px;
+    font-size: 23px;
+    line-height: 27px;
+    letter-spacing: -0.025em;
+  }
+}
+@keyframes nav-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
-  .reveal-nav-region * {
-    transition: none !important;
+  .menu-open .global-nav-links {
+    animation: none;
   }
 }

@@ -1,18 +1,6 @@
+import HomePage from './HomePage'
 import React from 'react'
-import {
-  ArrowRight,
-  ArrowUpRight,
-  AudioLines,
-  BookOpen,
-  Check,
-  Command,
-  Mail,
-  MessageCircle,
-  Monitor,
-  ShieldCheck,
-  Sparkles,
-} from 'lucide-react'
-import { motion, useReducedMotion } from 'motion/react'
+import { ArrowRight, ArrowUpRight, Mail, MessageCircle, Sparkles } from 'lucide-react'
 
 const EMAIL = 'abhishek.tiwarii9821@gmail.com'
 const LINKEDIN = 'https://www.linkedin.com/in/abhishek-tiwari-3a3594300/'
@@ -56,21 +44,9 @@ const faqs = [
   ],
   [
     'Can I turn off sounds and animations?',
-    'Interface sounds have their own switch and volume in Settings. They pause during voice sessions to protect dictation. Light and dark themes save in this browser, and animations follow your system’s reduced-motion preference.',
+    'Clicks have an optional sound switch and volume in Settings. Scrolling is always silent. They pause during voice sessions to protect dictation. Light and dark themes save in this browser, and animations follow your system’s reduced-motion preference.',
   ],
 ]
-function Mark() {
-  return (
-    <svg viewBox="0 0 180 180" fill="currentColor" aria-hidden="true">
-      <path d="M91 46C62 34 37 50 32 78C26 109 46 139 72 143C91 146 103 134 110 117C85 127 66 114 64 95C61 72 74 57 91 46Z" />
-      <path
-        opacity=".6"
-        d="M91 46C114 39 139 52 145 79C153 112 133 141 108 143C90 144 76 132 71 116C96 128 115 115 117 96C120 76 109 57 91 46Z"
-      />
-      <path d="M94 34C95 19 106 12 120 14C119 28 109 37 94 34Z" />
-    </svg>
-  )
-}
 export function ProductFooter({ navigate, compact = false }) {
   return (
     <footer className={`product-footer${compact ? ' compact' : ''}`}>
@@ -78,7 +54,7 @@ export function ProductFooter({ navigate, compact = false }) {
         <button className="footer-brand" onClick={() => navigate('home')}>
           APPLE<span>By Abhishek Tiwari</span>
         </button>
-        {!compact && <p>A little help. A little more possibility.</p>}
+        {!compact && <p>Made for the small jobs between the big ones.</p>}
       </div>
       <nav aria-label="Footer navigation">
         {[
@@ -111,205 +87,17 @@ export function ProductFooter({ navigate, compact = false }) {
     </footer>
   )
 }
-export default function ProductPages({ view, navigate }) {
-  const reduced = useReducedMotion()
+export default function ProductPages({ view, navigate, onTour, name }) {
   return (
-    <div className="product-page">
-      {view === 'home' && (
-        <>
-          <section className="product-hero">
-            <div className="hero-copy">
-              <span className="product-kicker">
-                <span /> PERSONAL INTELLIGENCE. ON YOUR MAC.
-              </span>
-              <h1>
-                Less between
-                <br />
-                you and <em>done.</em>
-              </h1>
-              <p>
-                A voice that listens. A workspace that remembers. A little help with the things that
-                fill your day.
-              </p>
-              <div className="hero-actions">
-                <button className="product-primary" onClick={() => navigate('assistant')}>
-                  Meet your assistant <ArrowRight size={17} />
-                </button>
-                <a
-                  href="#how-it-works"
-                  onClick={(e) => {
-                    e.preventDefault()
-                    document
-                      .getElementById('how-it-works')
-                      ?.scrollIntoView({ behavior: reduced ? 'instant' : 'smooth' })
-                  }}
-                >
-                  See how it works <ArrowUpRight size={15} />
-                </a>
-              </div>
-              <span className="hero-requirements">
-                Built for macOS · Local Ollama intelligence · Your pace
-              </span>
-            </div>
-            <div className="hero-art" aria-label="APPLE assistant illustration">
-              <div className="hero-orbit orbit-one" />
-              <div className="hero-orbit orbit-two" />
-              <motion.div
-                className="hero-emblem"
-                animate={reduced ? {} : { y: [0, -9, 0], rotate: [0, 2, 0] }}
-                transition={{ duration: 8, repeat: Infinity, ease: 'easeInOut' }}
-              >
-                <Mark />
-              </motion.div>
-              <div className="hero-note note-one">
-                <AudioLines size={16} />
-                <span>“I’m listening.”</span>
-                <i />
-              </div>
-              <div className="hero-note note-two">
-                <Check size={15} />
-                <span>A little more flow.</span>
-              </div>
-              <div className="hero-art-caption">APPLE / AT YOUR SERVICE</div>
-            </div>
-          </section>
-          <div className="product-principles">
-            <span>
-              <Command size={15} /> Real computer actions
-            </span>
-            <span>
-              <ShieldCheck size={15} /> Local model reasoning
-            </span>
-            <span>
-              <AudioLines size={15} /> A conversation, not a form
-            </span>
-          </div>
-          <section className="product-section">
-            <div className="product-section-heading">
-              <span className="product-kicker">ONE PLACE. A LITTLE MORE CAPABLE.</span>
-              <h2>
-                For the way
-                <br />
-                your day actually works.
-              </h2>
-              <p>Talk through an idea, find your focus, or turn a document into a conversation.</p>
-            </div>
-            <div className="feature-grid">
-              {[
-                [
-                  AudioLines,
-                  'Just say it.',
-                  'Ask a question or give a task. Hear concise replies, with listening and speaking reflected in the living APPLE mark.',
-                  '01',
-                ],
-                [
-                  Monitor,
-                  'A companion, wherever.',
-                  'Bring the floating assistant above your other windows. Keep talking, type a quick request, or stop a task without switching back.',
-                  '02',
-                ],
-                [
-                  BookOpen,
-                  'Make knowledge stick.',
-                  'Add your notes and documents. Ask questions, practise aloud and get feedback, one question at a time.',
-                  '03',
-                ],
-                [
-                  MessageCircle,
-                  'A little less switching.',
-                  'Open installed apps, search supported controls and message saved WhatsApp contacts through the native Mac app.',
-                  '04',
-                ],
-              ].map(([Icon, title, copy, number]) => (
-                <article className="feature-card" key={title}>
-                  <div>
-                    <Icon size={22} />
-                    <span>{number}</span>
-                  </div>
-                  <h3>{title}</h3>
-                  <p>{copy}</p>
-                </article>
-              ))}
-            </div>
-          </section>
-          <section id="how-it-works" className="product-section setup-section">
-            <div>
-              <span className="product-kicker">A SMALL SETUP. YOUR OWN WORKSPACE.</span>
-              <h2>
-                Make yourself
-                <br />
-                at home.
-              </h2>
-            </div>
-            <ol>
-              {[
-                [
-                  'Connect your intelligence',
-                  'Start your local APPLE server and Ollama. Choose a downloaded model in Settings.',
-                ],
-                [
-                  'Choose what feels right',
-                  'Pick a theme, voice language and sound level. Enable supported automation if you want fewer confirmations.',
-                ],
-                [
-                  'Start with a sentence',
-                  'Choose Start listening, allow your microphone, and tell APPLE what you need.',
-                ],
-              ].map(([title, copy], i) => (
-                <li key={title}>
-                  <span>0{i + 1}</span>
-                  <div>
-                    <h3>{title}</h3>
-                    <p>{copy}</p>
-                  </div>
-                </li>
-              ))}
-            </ol>
-          </section>
-          <section className="product-section privacy-promise">
-            <ShieldCheck size={28} />
-            <div>
-              <span className="product-kicker">CLEAR ABOUT YOUR DATA</span>
-              <h2>Your workspace stays on your Mac.</h2>
-              <p>
-                Conversations, documents and saved contacts are stored locally. Browser dictation
-                and actions you request can use online services. You choose what to keep.
-              </p>
-              <button className="product-text-link" onClick={() => navigate('privacy')}>
-                Read the privacy policy <ArrowRight size={16} />
-              </button>
-            </div>
-          </section>
-          <section className="product-section home-bottom">
-            <div>
-              <span className="product-kicker">MADE WITH INTENTION</span>
-              <h2>
-                A personal project.
-                <br />A human behind it.
-              </h2>
-              <p>
-                Created by Abhishek Tiwari. Have an idea, a question, or something that isn’t
-                working? I’d like to hear it.
-              </p>
-            </div>
-            <div>
-              <button className="product-primary" onClick={() => navigate('contact')}>
-                Get in touch <ArrowUpRight size={16} />
-              </button>
-              <button className="product-text-link" onClick={() => navigate('faq')}>
-                A few common questions <ArrowRight size={16} />
-              </button>
-            </div>
-          </section>
-        </>
-      )}
+    <div className={`product-page ${view === 'home' ? 'neo-home' : 'information-page'}`}>
+      {view === 'home' && <HomePage navigate={navigate} onTour={onTour} name={name} />}
       {view === 'faq' && (
         <section className="product-section info-page">
           <span className="product-kicker">A LITTLE CLARITY</span>
           <h1>
-            Good questions.
+            A few things
             <br />
-            Straight answers.
+            you might be wondering.
           </h1>
           <p className="info-intro">How APPLE works, what it needs, and where its limits are.</p>
           <div className="faq-list">
@@ -333,9 +121,8 @@ export default function ProductPages({ view, navigate }) {
         <section className="product-section info-page contact-page">
           <span className="product-kicker">CONTACT & CUSTOMER SUPPORT</span>
           <h1>
-            There’s a person
-            <br />
-            on the other side.
+            Let’s talk.
+            <br />I read every note.
           </h1>
           <p className="info-intro">
             Questions, feedback, or a bug to work through. Reach out directly to the person building
@@ -383,9 +170,9 @@ export default function ProductPages({ view, navigate }) {
         <section className="product-section info-page privacy-page">
           <span className="product-kicker">PRIVACY POLICY · UPDATED 3 OCTOBER 2026</span>
           <h1>
-            Understand
+            Your data,
             <br />
-            what stays where.
+            in plain language.
           </h1>
           <p className="info-intro">
             This policy describes this local APPLE application, developed by Abhishek Tiwari. APPLE
@@ -394,7 +181,7 @@ export default function ProductPages({ view, navigate }) {
           {[
             [
               'What APPLE stores',
-              'Your Mac stores activity history and conversation text, imported document text, study questions and answers, saved contacts, explicit memories, routines and app settings. Browser preferences, including theme, language and interface sounds, use local browser storage.',
+              'Your Mac stores your display name, tour completion, activity history and conversation text, imported document text, study questions and answers, saved contacts, explicit memories, routines and app settings. Browser preferences, including theme, language and optional click sounds, use local browser storage. Your display name personalizes this shared local workspace; it is not a login and does not separate different people’s data. Change it in Settings.',
             ],
             [
               'Model reasoning and speech',

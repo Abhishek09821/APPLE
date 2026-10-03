@@ -7,7 +7,7 @@ export function usePreferences() {
         ? localStorage.getItem('apple-theme')
         : null) || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'),
   )
-  const [sounds, setSounds] = useState(() => localStorage.getItem('apple-ui-sounds') !== 'false')
+  const [sounds, setSounds] = useState(() => localStorage.getItem('apple-ui-sounds') === 'true')
   const [soundVolume, setSoundVolume] = useState(() =>
     Math.max(0, Math.min(1, Number(localStorage.getItem('apple-sound-volume') ?? 0.15) || 0)),
   )

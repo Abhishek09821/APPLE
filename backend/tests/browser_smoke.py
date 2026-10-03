@@ -15,6 +15,7 @@ async def main():
         async def status(route):
             response = await route.fetch()
             data = await response.json()
+            data['profile'] = {'name':'Test User','tutorial_completed':True}
             data['settings'].update(auto_tutor=False, setup_completed=True)
             await route.fulfill(json=data)
         await page.route('**/api/status', status)
@@ -22,8 +23,8 @@ async def main():
         await page.route('**/api/command/stream', lambda route: route.fulfill(content_type='text/event-stream', body='data: '+json.dumps(approval)+'\n\n'))
         await page.route('**/api/approvals/ui-test', lambda route: route.fulfill(json={'cancelled':True}))
         async def navigate(label):
-            await page.locator('.reveal-nav-trigger').focus()
-            await page.keyboard.press('ArrowDown')
+            if await page.locator('.global-nav-toggle').is_visible():
+                await page.get_by_role('button', name='Show navigation', exact=True).click()
             await page.get_by_role('button', name=label, exact=True).click()
         await page.goto('http://127.0.0.1:8000/#assistant')
         await page.get_by_role('heading', name='At your service.', exact=True).wait_for()

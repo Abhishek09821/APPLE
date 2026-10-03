@@ -321,54 +321,6 @@ body,
   background: var(--accent);
   color: var(--accent-ink);
 }
-.reveal-nav-region {
-  width: 100%;
-  left: 0;
-  transform: none;
-}
-.reveal-nav-panel {
-  border-radius: 0 0 18px 18px;
-  padding: 12px 24px;
-  background: var(--surface);
-  border-color: var(--line);
-}
-.reveal-nav-items {
-  grid-template-columns: repeat(9, minmax(0, 1fr));
-  gap: 5px;
-}
-.reveal-nav-item {
-  color: var(--muted);
-}
-.reveal-nav-brand {
-  color: var(--ink);
-}
-.reveal-nav-item:hover,
-.reveal-nav-item.is-selected {
-  color: var(--ink);
-  background: var(--wash);
-}
-.reveal-nav-tools {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-.reveal-nav-tools button {
-  padding: 8px;
-  border-radius: 8px;
-  color: var(--muted);
-}
-.reveal-nav-region.public-nav {
-  height: 78px;
-}
-.public-nav .reveal-nav-panel {
-  top: 0;
-  min-height: 78px;
-  border-radius: 0;
-  box-shadow: none;
-}
-.public-nav-spacer {
-  flex: 0 0 78px;
-}
 .console-shell.public-shell .primary-content {
   overflow-y: auto;
 }
@@ -484,43 +436,7 @@ body,
     rotate: 5deg;
   }
 }
-@media (max-width: 1000px) {
-  .reveal-nav-panel {
-    padding: 9px 12px;
-  }
-  .reveal-nav-item {
-    flex-direction: column;
-    gap: 5px;
-    font-size: 9px;
-    padding: 6px 3px;
-  }
-  .reveal-nav-brand,
-  .reveal-nav-divider {
-    display: none;
-  }
-}
 @media (max-width: 650px) {
-  .reveal-nav-region {
-    width: 100%;
-    height: 146px;
-  }
-  .reveal-nav-items {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-  }
-  .reveal-nav-panel {
-    gap: 4px;
-    align-items: stretch;
-  }
-  .reveal-nav-tools {
-    flex-direction: column;
-    justify-content: center;
-  }
-  .public-nav .reveal-nav-panel {
-    height: 118px;
-  }
-  .public-nav-spacer {
-    flex-basis: 118px;
-  }
   .console-shell .top-actions {
     gap: 2px;
   }
@@ -615,13 +531,6 @@ body,
 }
 :root[data-theme='light'] .setup-card p {
   color: var(--secondary);
-}
-:root[data-theme='light'] .reveal-nav-trigger {
-  color: var(--secondary);
-  background: var(--surface-raised);
-}
-:root[data-theme='light'] .reveal-nav-panel {
-  box-shadow: 0 12px 28px #14283c12;
 }
 :root[data-theme='light'] .vc-core {
   filter: brightness(0.7) drop-shadow(0 3px 7px #18365722);

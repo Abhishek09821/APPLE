@@ -39,10 +39,11 @@ async def main():
    method = route.request.method
    if path == '/status':
     return await route.fulfill(json={'token':'fixture', 'ai':{'ready':True, 'models':['fixture']},
-      'settings':{'model':'fixture','speech_rate':175,'setup_completed':True,'automation_enabled':False,'auto_tutor':False,'expressive_voice':True}})
+      'profile':{'name':'Test User','tutorial_completed':True},'settings':{'model':'fixture','speech_rate':175,'setup_completed':True,'automation_enabled':False,'auto_tutor':False,'expressive_voice':True}})
    if path == '/history' and method == 'GET': return await route.fulfill(json=history)
    if path == '/history/delete':
-    if reject_delete.pop() if reject_delete else False:
+    if reject_delete:
+     reject_delete.pop()
      return await route.fulfill(status=503, json={'detail':'Temporary deletion failure. Try again.'})
     ids = route.request.post_data_json['ids']; mutations.append(ids)
     count = len(history); history[:] = [h for h in history if h['id'] not in ids]
@@ -65,15 +66,15 @@ async def main():
   context.on('page',lambda tab:tab.on('pageerror',lambda e:errors.append(str(e))))
   page.on('pageerror',lambda e:errors.append(str(e)))
   async def navigate(label):
-   trigger=page.locator('.reveal-nav-trigger')
-   if await trigger.count():
+   trigger=page.locator('.global-nav-toggle')
+   if await trigger.is_visible():
     await trigger.focus(); await page.keyboard.press('ArrowDown')
    await page.get_by_role('navigation',name='Main navigation').get_by_role('button',name=label,exact=True).click()
   async def no_overflow():
    assert await page.evaluate('document.documentElement.scrollWidth <= innerWidth'), 'Document overflow'
    assert await page.locator('.primary-content').evaluate('(el)=>el.scrollWidth <= el.clientWidth+1'), 'Content overflow'
   await page.goto('http://127.0.0.1:8000')
-  await page.get_by_role('heading',name='Less between you and done.').wait_for()
+  await page.get_by_role('heading',name='Less clicking. More living.').wait_for()
   nav=await page.get_by_role('navigation',name='Main navigation').bounding_box()
   assert nav['width'] == 1440
   await page.screenshot(path='/tmp/apple-home-dark.png')
@@ -82,11 +83,11 @@ async def main():
   await page.wait_for_timeout(300)
   await page.screenshot(path='/tmp/apple-home-light.png')
   await page.reload()
-  await page.get_by_role('heading',name='Less between you and done.').wait_for()
+  await page.get_by_role('heading',name='Less clicking. More living.').wait_for()
   assert await page.locator('html').get_attribute('data-theme') == 'light'
-  await page.get_by_role('button',name='Mute interface sounds').click()
-  assert await page.evaluate("localStorage.getItem('apple-ui-sounds')") == 'false'
-  await page.get_by_role('button',name='Enable interface sounds').click()
+  await navigate('Settings & connections')
+  await page.get_by_role('switch',name='Interface sounds',exact=True).click()
+  assert await page.evaluate("localStorage.getItem('apple-ui-sounds')") == 'true'
   await navigate('FAQs')
   await page.locator('summary').filter(has_text='How does the floating companion work?').click()
   assert await page.locator('details[open]').count() == 1
@@ -95,7 +96,7 @@ async def main():
   await page.mouse.move(600,650)
   await page.mouse.wheel(0,400)
   await page.wait_for_timeout(350)
-  assert await page.evaluate('window.clickTones') > tones, 'No scrolling audio feedback'
+  assert await page.evaluate('window.clickTones') == tones, 'Scrolling must always be silent'
   await navigate('Contact & support')
   assert await page.locator('.contact-links a').first.get_attribute('href') == 'mailto:abhishek.tiwarii9821@gmail.com?subject=APPLE%20support'
   assert await page.locator('.contact-links a').last.get_attribute('href') == 'https://www.linkedin.com/in/abhishek-tiwari-3a3594300/'
