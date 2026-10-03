@@ -4,10 +4,12 @@ import sys
 import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
+from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import whatsapp_native as native
 import executor
+from desktop_apps import InstalledApp
 from models import Action
 
 
@@ -68,13 +70,15 @@ class NativeWhatsAppTests(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self):
         self.sleep.stop()
 
-    async def test_open_whatsapp_uses_installed_bundle_and_no_accessibility(self):
+    async def test_open_whatsapp_uses_installed_app_and_no_accessibility(self):
         process = AsyncMock(return_value='')
-        with patch.object(native, 'NativeAX') as ax, patch.object(executor, 'process', process):
+        apps = [InstalledApp('WhatsApp', '/Applications/WhatsApp.app', native.BUNDLE_ID)]
+        with patch.object(native, 'NativeAX') as ax, patch.object(executor, 'process', process), \
+             patch('desktop_apps.installed_apps', return_value=apps):
             result = await executor._execute(Action(action='open_app', target='whatsapp'))
-        process.assert_awaited_once_with('open', '-b', native.BUNDLE_ID)
+        process.assert_awaited_once_with('open', '-a', '/Applications/WhatsApp.app')
         ax.assert_not_called()
-        self.assertIn('WhatsApp app', result['message'])
+        self.assertIn('WhatsApp', result['message'])
 
     async def test_phone_open_does_not_prefill_or_send_a_message(self):
         process = AsyncMock(return_value='')
@@ -99,7 +103,7 @@ class NativeWhatsAppTests(unittest.IsolatedAsyncioTestCase):
         ax = FakeAX()
         result = await native.native_chat(ax, 'Rahul', '', False)
         self.assertEqual(ax.presses, [4])
-        self.assertEqual(ax.writes, [(3, 'Rahul')])
+        self.assertEqual(ax.writes, [(3, 'rahul')])
         self.assertEqual(result['message'], 'Opened Rahul in the WhatsApp app.')
 
     async def test_duplicate_contacts_never_open_or_send(self):
@@ -196,6 +200,62 @@ class NativeWhatsAppTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(ValueError, 'control characters'):
             await native.whatsapp('Rahul\nSend this', 'Hi!', True, process)
         process.assert_not_awaited()
+
+    async def test_saved_number_accepts_verified_configured_display_name(self):
+        ax = FakeAX(contact='Rahul')
+        result = await native.native_chat(ax, '+919876543210', 'Hi!', True, phone=True, expected_name='Rahul')
+        self.assertTrue(ax.sent)
+        self.assertIn('Rahul', result['message'])
+        self.assertNotIn(3, [handle for handle, _ in ax.writes])
+
+    async def test_saved_number_route_skips_name_search_and_never_prefills_draft(self):
+        process = AsyncMock(side_effect=['', '123', '/Applications/WhatsApp.app/Contents/MacOS/WhatsApp', ''])
+        ax = SimpleNamespace(contact='', expected_name='', close_contacts=AsyncMock(), show_contacts=AsyncMock())
+        chat = AsyncMock(return_value={'message': 'Checked'})
+        with patch.object(native, 'NativeAX', return_value=ax), patch.object(native, 'native_chat', chat):
+            await native.whatsapp('+919876543210', 'Hi!', True, process, expected_name='Rahul')
+        self.assertEqual(process.call_args.args, ('open', '-b', native.BUNDLE_ID, 'whatsapp://send?phone=919876543210'))
+        self.assertEqual(ax.expected_name, 'Rahul')
+        ax.show_contacts.assert_not_awaited()
+        chat.assert_awaited_once_with(ax, '+919876543210', 'Hi!', True, phone=True, expected_name='Rahul')
+
+    async def test_saved_number_rejects_wrong_chat_before_typing(self):
+        ax = FakeAX(contact='Wrong Recipient')
+        with self.assertRaisesRegex(ValueError, 'recipient'):
+            await native.native_chat(ax, '+919876543210', 'Hi!', True, phone=True, expected_name='Rahul')
+        self.assertEqual(ax.writes, [])
+        self.assertFalse(ax.sent)
+
+    async def test_phone_header_accepts_formatting_without_saved_name(self):
+        tree = ui(contact='+91 98765 43210')
+        header = next(n for n in tree.walk() if n.handle == 8)
+        header.identifier = 'NavigationBar_HeaderViewButton'
+        self.assertEqual(native.verified_recipient(tree, '+919876543210').handle, 9)
+
+    async def test_active_dialog_blocks_typing_into_background_chat(self):
+        tree = ui(contact='Rahul')
+        tree.children.append(native.Node(99, 'AXSheet'))
+        with self.assertRaisesRegex(ValueError, 'Close the WhatsApp dialog'):
+            native.verified_recipient(tree, '+919876543210', 'Rahul')
+
+    async def test_contact_search_ignores_decorative_emoji_but_keeps_full_recipient(self):
+        row = native.Node(2, 'AXButton', identifier='ChatListSearchView_ChatResult', description='Rahul Sharma ❤️')
+        tree = native.Node(1, 'AXGroup', children=[row])
+        self.assertEqual(native.exact_chat(tree, 'Rahul').handle, 2)
+        self.assertEqual(native.contact_key('Rahul Sharma ❤️'), 'rahul sharma')
+        row2 = native.Node(3, 'AXButton', identifier='ChatListSearchView_ChatResult', description='Rahul Work')
+        tree.children.append(row2)
+        with self.assertRaisesRegex(ValueError, 'more than one'):
+            native.exact_chat(tree, 'Rahul')
+
+    async def test_message_results_and_navigation_filters_are_not_contacts(self):
+        tree = native.Node(1, 'AXGroup', children=[
+            native.Node(2, 'AXTextField', identifier='PickerView_SearchBar'),
+            native.Node(3, 'AXButton', identifier='ChatListSearchView_MessageResult', description='All'),
+            native.Node(4, 'AXButton', description='All'),
+        ])
+        with self.assertRaisesRegex(ValueError, 'could not find a WhatsApp contact'):
+            native.exact_chat(tree, 'All')
 
 
 if __name__ == '__main__':

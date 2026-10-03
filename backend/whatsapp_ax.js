@@ -37,11 +37,12 @@ function run(argv) {
   }
   function visit(node, path, depth) {
     if (++count > 1600 || depth > 28) throw Error('WhatsApp’s control layout is too large to verify safely.');
+    if (scalar(node, 'AXVisible') === false || scalar(node, 'AXHidden') === true) return null;
     const item = {handle: path, role: scalar(node, 'AXRole'), title: scalar(node, 'AXTitle'),
       description: scalar(node, 'AXDescription'), value: scalar(node, 'AXValue'),
       placeholder: scalar(node, 'AXPlaceholderValue'), identifier: scalar(node, 'AXIdentifier'),
       enabled: scalar(node, 'AXEnabled') !== false, selected: scalar(node, 'AXSelected') === true};
-    item.children = children(node).map((child, i) => visit(child, path + '.' + i, depth + 1));
+    item.children = children(node).map((child, i) => visit(child, path + '.' + i, depth + 1)).filter(Boolean);
     return item;
   }
   function window() {
@@ -53,19 +54,24 @@ function run(argv) {
     if (!windows || Number(windows.count) !== 1) throw Error('Keep one WhatsApp window open and close its dialogs.');
     return windows.objectAtIndex(0);
   }
-  function all(node) { return [node].concat(...children(node).map(all)); }
+  function all(node) {
+    if (scalar(node, 'AXVisible') === false || scalar(node, 'AXHidden') === true) return [];
+    return [node].concat(...children(node).map(all));
+  }
   function header(root) {
     return all(root).filter(n => scalar(n, 'AXIdentifier') === 'NavigationBar_HeaderViewButton');
   }
   function verifyRecipient(root) {
     if (!request.contact) return;
+    if (all(root).some(n => scalar(n, 'AXRole') === 'AXSheet')) throw Error('Close the WhatsApp dialog before sending. No message was sent.');
     const headers = header(root);
     function same(value) {
       const left = norm(value), right = norm(request.contact);
       const phone = /^\+?[1-9][0-9 ()\-]{6,22}$/;
       return left === right || (phone.test(left) && phone.test(right) && left.replace(/\D/g, '') === right.replace(/\D/g, ''));
     }
-    if (headers.length !== 1 || !['AXTitle', 'AXDescription', 'AXValue'].some(k => same(scalar(headers[0], k))))
+    if (headers.length !== 1 || !['AXTitle', 'AXDescription', 'AXValue'].some(k =>
+      same(scalar(headers[0], k)) || (request.expected_name && norm(scalar(headers[0], k)) === norm(request.expected_name))))
       throw Error('The WhatsApp recipient changed. No message was sent.');
   }
   function resolve(root, target) {
@@ -76,10 +82,38 @@ function run(argv) {
       node = children(node)[index];
       if (!node) throw Error('WhatsApp’s layout changed. No message was sent.');
     }
+    if (scalar(node, 'AXVisible') === false || scalar(node, 'AXHidden') === true) throw Error('The WhatsApp control is no longer visible. No message was sent.');
     for (const [field, key] of [['role', 'AXRole'], ['identifier', 'AXIdentifier'], ['title', 'AXTitle'], ['description', 'AXDescription']]) {
       if (scalar(node, key) !== (target[field] || '')) throw Error('The selected WhatsApp control changed. No message was sent.');
     }
     return node;
+  }
+  if (request.operation === 'close_contacts') {
+    const buttons = all(window()).filter(n => scalar(n, 'AXIdentifier') === 'PickerView_CloseButton');
+    if (buttons.length === 1) $.AXUIElementPerformAction(buttons[0], $('AXPress'));
+    return '{}';
+  }
+  if (request.operation === 'show_contacts') {
+    let root = window();
+    const existing = all(root).filter(n => scalar(n, 'AXIdentifier') === 'PickerView_SearchBar');
+    if (existing.length === 1) {
+      $.AXUIElementSetAttributeValue(existing[0], $('AXFocused'), $(true));
+      return '{}';
+    }
+    let buttons = all(root).filter(n => scalar(n, 'AXIdentifier') === 'NavigationBar_NewChatButton');
+    if (buttons.length !== 1) {
+      const chats = all(root).filter(n => scalar(n, 'AXIdentifier') === 'SidebarButton_Chats');
+      if (chats.length === 1 && $.AXUIElementPerformAction(chats[0], $('AXPress')) === 0) {
+        delay(.12); root = window();
+        buttons = all(root).filter(n => scalar(n, 'AXIdentifier') === 'NavigationBar_NewChatButton');
+      }
+    }
+    if (buttons.length !== 1 || $.AXUIElementPerformAction(buttons[0], $('AXPress')))
+      throw Error('Open WhatsApp’s Chats tab and sign in, then try again.');
+    delay(.12);
+    const search = all(window()).filter(n => scalar(n, 'AXIdentifier') === 'PickerView_SearchBar');
+    if (search.length === 1) $.AXUIElementSetAttributeValue(search[0], $('AXFocused'), $(true));
+    return '{}';
   }
   if (request.operation === 'show_search') {
     const existing = all(window()).filter(n => scalar(n, 'AXIdentifier') === 'TokenizedSearchBar_TextView');
@@ -103,7 +137,7 @@ function run(argv) {
   if (request.operation === 'set_value') {
     if (scalar(node, 'AXValue') !== request.node.value) throw Error('The WhatsApp draft changed. No message was sent.');
     const identifier = scalar(node, 'AXIdentifier');
-    if (identifier === 'TokenizedSearchBar_TextView') {
+    if (identifier === 'TokenizedSearchBar_TextView' || identifier === 'PickerView_SearchBar') {
       if (/[\x00-\x1f\x7f]/.test(request.value)) throw Error('Use a single contact name without control characters.');
       // Catalyst's search control is AXStaticText and has no settable AXValue.
       // Use text events only while that exact search field remains focused.

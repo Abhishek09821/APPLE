@@ -5,6 +5,13 @@ import LibraryView from './components/LibraryView'
 import React, { useEffect, useRef, useState } from 'react'
 import { MotionConfig, motion } from 'motion/react'
 import VoiceStage from './components/VoiceStage'
+import VoiceTutor from './components/VoiceTutor'
+import AutomationSetup from './components/AutomationSetup'
+import './tutor.css'
+import AmbientField from './components/AmbientField'
+import RevealNav from './components/RevealNav'
+import { useVoiceTutor } from './hooks/useVoiceTutor'
+import { isPlaybackEcho } from './utils/speech-echo'
 import { useVoiceSession } from './hooks/useVoiceSession'
 import { useAudioEngine } from './hooks/useAudioEngine'
 import './console-shell.css'
@@ -59,6 +66,14 @@ const actionLabel = (a) =>
     press_key: 'Press key',
     run_shortcut: 'Run Shortcut',
     learn_document: 'Learn document',
+    list_apps: 'Find installed apps',
+    inspect_app: 'Read app controls',
+    search_app: 'Search inside app',
+    click_control: 'Use app control',
+    set_field: 'Enter text',
+    automate_app: 'Work in app',
+    remember_fact: 'Save memory',
+    recall_memory: 'Recall memories',
   })[a] || a
 
 export default function App() {
@@ -76,6 +91,9 @@ export default function App() {
   const [documents, setDocuments] = useState([])
   const [routines, setRoutines] = useState([])
   const [history, setHistory] = useState([])
+  const [memories, setMemories] = useState([])
+  const [automation, setAutomation] = useState(false)
+  const [autoTutor, setAutoTutor] = useState(true)
   const [selectedDoc, setSelectedDoc] = useState(null)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -101,16 +119,62 @@ export default function App() {
   const fileInput = useRef(null)
   const session = useRef(crypto.randomUUID())
   const busyRef = useRef(false)
+  const spoken = useRef({ text: '', until: 0 })
+  const tutor = useVoiceTutor({
+    speak,
+    cancelSpeech,
+    onError: setError,
+    onStart: () => {
+      setView('assistant')
+      setVoice(true)
+      localStorage.setItem('apple-voice', 'true')
+      audio.prepare().catch((e) => setError(e.message))
+      voiceSession.start()
+    },
+  })
 
   const approvalPending = messages.some((m) => m.approval)
   const voiceSession = useVoiceSession({
     suspended:
-      busy || speechPending || speaking || approvalPending || view !== 'assistant' || !connected,
-    onCommand: (text) =>
-      /^(stop|stop listening|end voice session)[.!?]?$/i.test(text.trim()) ? stop() : send(text),
+      busy ||
+      ['preparing', 'grading'].includes(tutor.lesson?.stage) ||
+      approvalPending ||
+      view !== 'assistant' ||
+      !connected,
+    onCommand: handleVoiceCommand,
+    acceptTranscript: (text) =>
+      !(
+        (speaking || Date.now() < spoken.current.until) &&
+        isPlaybackEcho(text, spoken.current.text)
+      ),
+    onSpeech: () => {
+      if (speaking || speechPending) {
+        tutor.interrupt()
+        cancelSpeech()
+      }
+    },
     onError: setError,
   })
   const listening = voiceSession.listening
+  useEffect(() => {
+    if (!speaking) spoken.current.until = Date.now() + 650
+  }, [speaking])
+  function handleVoiceCommand(text) {
+    if (/^(?:wait|pause|stop talking|listen)[.!?]?$/i.test(text.trim())) {
+      cancelSpeech()
+      return
+    }
+    if (/^(?:stop|stop listening|end voice session)[.!?]?$/i.test(text.trim())) return stop()
+    if (/^(?:end|stop|cancel) (?:the )?(?:lesson|quiz)[.!?]?$/i.test(text.trim()))
+      return tutor.stop()
+    if (
+      tutor.lesson &&
+      /^(?:continue|next|next question|continue lesson)[.!?]?$/i.test(text.trim())
+    )
+      return tutor.resume()
+    if (['question', 'answer'].includes(tutor.lesson?.stage)) return tutor.submit(text)
+    return send(text)
+  }
   useEffect(() => {
     if (!listening) return
     let stale = false
@@ -144,10 +208,12 @@ export default function App() {
         api('/documents'),
         api('/routines'),
         api('/history'),
+        api('/memories'),
       ])
       if (results[0].status === 'fulfilled') setDocuments(results[0].value)
       if (results[1].status === 'fulfilled') setRoutines(results[1].value)
       if (results[2].status === 'fulfilled') setHistory(results[2].value)
+      if (results[3].status === 'fulfilled') setMemories(results[3].value)
       return s
     } catch {
       setConnected(false)
@@ -160,6 +226,8 @@ export default function App() {
       if (s && live) {
         setModel(s.settings.model)
         setSpeechRate(s.settings.speech_rate)
+        setAutomation(s.settings.automation_enabled)
+        setAutoTutor(s.settings.auto_tutor !== false)
       }
     })
     const timer = setInterval(refresh, 15000)
@@ -200,13 +268,14 @@ export default function App() {
     if (!text?.trim()) return Promise.resolve()
     const epoch = speechEpoch.current
     audio.prepare().catch((e) => setError(e.message))
-    voiceSession.pause()
     setSpeechPending(true)
     const task = speechQueue.current
       .catch(() => {})
       .then(async () => {
         if (epoch !== speechEpoch.current) return
+        spoken.current = { text, until: 0 }
         await audio.play(text)
+        spoken.current.until = Date.now() + 650
       })
       .catch((e) => {
         if (epoch === speechEpoch.current) setError(e.message)
@@ -220,15 +289,16 @@ export default function App() {
   function cancelSpeech() {
     speechEpoch.current += 1
     audio.stop()
-    speechQueue.current = Promise.resolve()
+    const stopped = api('/speech/stop', { method: 'POST' }).catch(() => {})
+    speechQueue.current = stopped
     setSpeechPending(false)
-    return api('/speech/stop', { method: 'POST' }).catch(() => {})
+    return stopped
   }
   function toggleSession() {
     audio.prepare().catch((e) => setError(e.message))
     if (voiceSession.enabled) {
       voiceSession.stop()
-      cancelSpeech()
+      tutor.stop()
     } else {
       setError('')
       setView('assistant')
@@ -240,6 +310,8 @@ export default function App() {
   function eventHandler(id) {
     return (event) => {
       if (event.type === 'status') setPhase(event.message)
+      if (event.type === 'agent_step')
+        setPhase(`${actionLabel(event.action?.action)} · ${event.action?.target || ''}`)
       if (event.type === 'plan') {
         patchMessage(id, { text: event.reply, actions: event.actions })
         setPhase(event.actions.length ? 'Working on your request…' : 'Preparing a response…')
@@ -289,6 +361,10 @@ export default function App() {
   }
   async function send(text = input) {
     if (!text.trim() || busyRef.current || approvalPending) return
+    if (['question', 'answer'].includes(tutor.lesson?.stage)) {
+      setInput('')
+      return tutor.submit(text)
+    }
     voiceSession.pause()
     audio.prepare().catch((e) => setError(e.message))
     const id = crypto.randomUUID()
@@ -374,7 +450,7 @@ export default function App() {
   async function stop() {
     controller.current?.abort()
     voiceSession.stop()
-    await cancelSpeech()
+    await tutor.stop()
     try {
       await api('/stop', { method: 'POST' })
       setMessages((prev) =>
@@ -391,7 +467,7 @@ export default function App() {
     localStorage.setItem('apple-voice', String(!voice))
     if (voice) {
       voiceSession.stop()
-      cancelSpeech()
+      tutor.stop()
     }
   }
   async function doWork(fn) {
@@ -407,14 +483,20 @@ export default function App() {
   }
   async function upload(file) {
     if (!file) return
+    audio.prepare().catch(() => {})
     await doWork(async () => {
       const form = new FormData()
       form.append('file', file)
-      await api('/documents', { method: 'POST', body: form })
-      await refresh()
-      setNotice('Document added to your local library.')
+      const document = await api('/documents', { method: 'POST', body: form })
+      await afterImport(document)
     })
     if (fileInput.current) fileInput.current.value = ''
+  }
+  async function afterImport(document) {
+    await refresh()
+    setSelectedDoc(document)
+    setNotice('Document added to your local library.')
+    if (autoTutor) await tutor.start(document)
   }
   async function startQuiz(doc) {
     await doWork(async () => {
@@ -432,53 +514,35 @@ export default function App() {
   return (
     <MotionConfig reducedMotion="user">
       <div className={`app-shell console-shell ${view === 'assistant' ? 'console-active' : ''}`}>
-        <aside className="app-rail" aria-label="Main navigation">
-          <button
-            className="rail-brand"
-            aria-label="APPLE home"
-            title="APPLE"
-            onClick={() => setView('assistant')}
-          >
-            <svg viewBox="0 0 180 180" aria-hidden="true">
-              <path
-                d="M91 46C62 34 37 50 32 78C26 109 46 139 72 143C91 146 103 134 110 117C85 127 66 114 64 95C61 72 74 57 91 46Z"
-                fill="currentColor"
-              />
-              <path
-                d="M91 46C114 39 139 52 145 79C153 112 133 141 108 143C90 144 76 132 71 116C96 128 115 115 117 96C120 76 109 57 91 46Z"
-                fill="currentColor"
-                opacity=".65"
-              />
-              <path d="M94 34C95 19 106 12 120 14C119 28 109 37 94 34Z" fill="currentColor" />
-            </svg>
-          </button>
-          <nav>
-            {navigation.map(({ id, label, icon: Icon }) => (
-              <button
-                key={id}
-                aria-label={label}
-                title={label}
-                className={`rail-item ${view === id ? 'selected' : ''}`}
-                onClick={() => {
-                  setView(id)
-                  setError('')
-                }}
-              >
-                <Icon size={19} strokeWidth={1.6} />
-                <span>{label}</span>
-              </button>
-            ))}
-          </nav>
-          <button
-            aria-label="Settings & connections"
-            title="Settings & connections"
-            className={`rail-item rail-settings ${view === 'settings' ? 'selected' : ''}`}
-            onClick={() => setView('settings')}
-          >
-            <Settings2 size={19} strokeWidth={1.6} />
-            <span>Settings</span>
-          </button>
-        </aside>
+        <AmbientField audioLevel={audio.level} />
+        {status && !status.settings.setup_completed && (
+          <AutomationSetup
+            working={working}
+            onChoose={(enabled) =>
+              doWork(async () => {
+                await api('/settings', {
+                  method: 'PUT',
+                  body: JSON.stringify({
+                    ...status.settings,
+                    automation_enabled: enabled,
+                    setup_completed: true,
+                  }),
+                })
+                setAutomation(enabled)
+                await refresh()
+              })
+            }
+          />
+        )}
+        <RevealNav
+          view={view}
+          navigation={navigation}
+          onNavigate={(id) => {
+            if (id !== 'assistant') tutor.stop()
+            setView(id)
+            setError('')
+          }}
+        />
 
         <main className="main-shell">
           <header className="topbar">
@@ -533,6 +597,7 @@ export default function App() {
                       className="subtle-button"
                       disabled={busy || speechPending || messages.some((m) => m.approval)}
                       onClick={() => {
+                        tutor.stop()
                         setMessages([initialMessage])
                         session.current = crypto.randomUUID()
                         setSelectedDoc(null)
@@ -542,8 +607,13 @@ export default function App() {
                     </button>
                   </div>
                   <div className="chat-scroll">
+                    <VoiceTutor
+                      tutor={tutor}
+                      transcript={voiceSession.transcript}
+                      listening={listening}
+                    />
                     <VoiceStage
-                      compact={!welcome}
+                      compact={!welcome || !!tutor.lesson}
                       enabled={voiceSession.enabled}
                       listening={listening}
                       speaking={speaking}
@@ -559,7 +629,7 @@ export default function App() {
                       onLibrary={() => setView('library')}
                       onPrompt={send}
                     />
-                    {!welcome && (
+                    {!welcome && !tutor.lesson && (
                       <div className="messages">
                         {messages
                           .filter((m) => !m.welcome)
@@ -812,6 +882,11 @@ export default function App() {
                   setView={setView}
                   setInput={setInput}
                   startQuiz={startQuiz}
+                  startVoiceLesson={(doc) => {
+                    setSelectedDoc(doc)
+                    tutor.start(doc)
+                  }}
+                  afterImport={afterImport}
                   selectedDoc={selectedDoc}
                 />
               )}
@@ -841,6 +916,11 @@ export default function App() {
               {view === 'settings' && (
                 <SettingsView
                   status={status}
+                  memories={memories}
+                  automation={automation}
+                  setAutomation={setAutomation}
+                  autoTutor={autoTutor}
+                  setAutoTutor={setAutoTutor}
                   model={model}
                   setModel={setModel}
                   refresh={refresh}
@@ -859,7 +939,7 @@ export default function App() {
           <input
             ref={fileInput}
             type="file"
-            accept=".pdf,.txt,.md"
+            accept=".pdf,.txt,.md,.docx"
             hidden
             onChange={(e) => upload(e.target.files[0])}
           />

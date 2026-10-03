@@ -188,7 +188,9 @@ export default function VoiceStage({
     connecting: 'Allow microphone access to begin.',
     listening: 'Go ahead. I’m here.',
     thinking: phase || 'Working on your request.',
-    speaking: 'I’ll listen again when I finish.',
+    speaking: enabled
+      ? 'You can interrupt me. I’m listening.'
+      : 'Start a voice session to talk with me.',
     review: 'Review the action below.',
     offline: 'Waiting for the local server.',
   }

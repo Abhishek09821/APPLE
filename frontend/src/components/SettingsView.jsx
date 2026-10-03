@@ -1,6 +1,7 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { AudioLines, Check, ShieldCheck, Sparkles, Volume2 } from 'lucide-react'
 import { api } from '../utils/api'
+import SavedContacts from './SavedContacts'
 
 export default function SettingsView({
   status,
@@ -15,7 +16,18 @@ export default function SettingsView({
   speak,
   working,
   doWork,
+  memories = [],
+  automation,
+  setAutomation,
+  autoTutor,
+  setAutoTutor,
 }) {
+  const [permissions, setPermissions] = useState(null)
+  useEffect(() => {
+    api('/permissions')
+      .then(setPermissions)
+      .catch(() => setPermissions(null))
+  }, [])
   return (
     <div className="page-content settings-page">
       <div className="page-heading">
@@ -121,7 +133,8 @@ export default function SettingsView({
         <p className="field-hint">
           Microphone dictation uses your browser’s speech service and may send audio to its
           provider. Start a voice session to submit speech automatically, hear replies, and continue
-          hands-free. Chrome is recommended. The microphone pauses while APPLE speaks.
+          hands-free. Chrome is recommended. Speak during a reply to interrupt it; headphones help
+          prevent speaker echo from being mistaken for your voice.
         </p>
       </div>
       <div className="settings-card">
@@ -138,6 +151,39 @@ export default function SettingsView({
           <span>Apps, web search & local files</span>
           <span className="tag green">macOS</span>
         </div>
+        <div className="setting-row">
+          <div>
+            <strong>Trusted automation</strong>
+            <p>
+              Run your requested app actions and messages without asking again. You can stop or
+              revoke this anytime.
+            </p>
+          </div>
+          <button
+            className={`toggle ${automation ? 'on' : ''}`}
+            role="switch"
+            aria-checked={automation}
+            aria-label="Trusted automation"
+            onClick={() => setAutomation(!automation)}
+          >
+            <span />
+          </button>
+        </div>
+        <div className="setting-row">
+          <div>
+            <strong>Teach me after upload</strong>
+            <p>Ask questions aloud, listen to your answers, and explain the result.</p>
+          </div>
+          <button
+            className={`toggle ${autoTutor ? 'on' : ''}`}
+            role="switch"
+            aria-checked={autoTutor}
+            aria-label="Teach me after upload"
+            onClick={() => setAutoTutor(!autoTutor)}
+          >
+            <span />
+          </button>
+        </div>
         <div className="capability-row">
           <span>WhatsApp messaging</span>
           <span className="tag amber">INSTALLED MAC APP</span>
@@ -152,11 +198,65 @@ export default function SettingsView({
           Accessibility access to select chats. App layouts can change; failures are reported
           without claiming success.
         </p>
+        <div className="capability-row">
+          <span>Accessibility connection</span>
+          <span className={`tag ${permissions?.accessibility ? 'green' : 'amber'}`}>
+            {permissions?.accessibility ? 'CONNECTED' : 'CHECK ACCESS'}
+          </span>
+        </div>
+        {!permissions?.accessibility && (
+          <button
+            className="secondary-button"
+            onClick={() =>
+              doWork(async () => {
+                await api('/permissions/accessibility', { method: 'POST' })
+                setNotice('Enable the app that starts APPLE in Accessibility, then check again.')
+              })
+            }
+          >
+            Open Accessibility settings
+          </button>
+        )}
+        <button
+          className="subtle-button"
+          onClick={() => doWork(async () => setPermissions(await api('/permissions')))}
+        >
+          Check permissions
+        </button>
         <p className="field-hint">
-          For other apps, teach a routine using a named macOS Shortcut. This assistant does not yet
-          see and operate arbitrary screens.
+          APPLE can discover installed apps and work with their accessible controls. Some apps do
+          not expose controls; a macOS Shortcut can cover those workflows. System permission prompts
+          are managed by macOS.
         </p>
       </div>
+      <div className="settings-card">
+        <h3>Memory</h3>
+        <p>
+          Say “remember that…” to save a fact for future conversations. Documents stay in your
+          library.
+        </p>
+        {memories.length ? (
+          memories.map((memory) => (
+            <div className="setting-row" key={memory.id}>
+              <p>{memory.text}</p>
+              <button
+                className="subtle-button"
+                onClick={() =>
+                  doWork(async () => {
+                    await api(`/memories/${memory.id}`, { method: 'DELETE' })
+                    await refresh()
+                  })
+                }
+              >
+                Forget
+              </button>
+            </div>
+          ))
+        ) : (
+          <p className="field-hint">No saved facts yet.</p>
+        )}
+      </div>
+      <SavedContacts />
       <button
         className="primary-button"
         disabled={working || !model.trim()}
@@ -168,6 +268,9 @@ export default function SettingsView({
                 model: model.trim(),
                 voice,
                 speech_rate: speechRate,
+                automation_enabled: automation,
+                setup_completed: true,
+                auto_tutor: autoTutor,
               }),
             })
             await refresh()

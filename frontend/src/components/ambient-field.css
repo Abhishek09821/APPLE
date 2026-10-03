@@ -1,0 +1,74 @@
+.ambient-field {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background: #08090c;
+  contain: strict;
+}
+
+.ambient-aurora {
+  position: absolute;
+  inset: -9%;
+  background:
+    radial-gradient(ellipse at 34% 30%, #7498da20 0, #54739809 23%, transparent 47%),
+    radial-gradient(ellipse at 69% 38%, #aa91ca1f 0, #9778b008 26%, transparent 48%),
+    radial-gradient(ellipse at 49% 63%, #76b3c612 0, transparent 40%);
+  filter: blur(32px);
+  will-change: transform, opacity;
+}
+
+.ambient-dots {
+  position: absolute;
+  inset: -25px;
+  background-image: radial-gradient(circle, #b5c5e222 0.65px, transparent 0.85px);
+  background-size: 28px 28px;
+  mask-image: radial-gradient(ellipse 60% 61% at 50% 40%, #0009, transparent 85%);
+  opacity: 0.65;
+  will-change: transform;
+}
+
+.ambient-pointer-light {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    350px circle at var(--pointer-x, 50%) var(--pointer-y, 42%),
+    #a4bde10a,
+    #9ab9e004 35%,
+    transparent 75%
+  );
+}
+
+.ambient-horizon {
+  position: absolute;
+  left: 14%;
+  right: 14%;
+  top: 69%;
+  height: 1px;
+  opacity: 0.55;
+  background: linear-gradient(90deg, transparent, #bbd0f10c 30%, #c4c5f514 50%, transparent);
+}
+
+.ambient-vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 87% 92% at 50% 34%, transparent 30%, #08090c80 90%);
+}
+
+@media (max-width: 650px) {
+  .ambient-dots {
+    background-size: 24px 24px;
+    opacity: 0.45;
+  }
+
+  .ambient-aurora {
+    inset: -25%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ambient-field * {
+    will-change: auto;
+  }
+}

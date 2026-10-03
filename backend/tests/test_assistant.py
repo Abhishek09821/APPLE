@@ -102,6 +102,27 @@ class AssistantTests(unittest.TestCase):
             self.assertEqual(self.post(url, json={'approve': True}).status_code, 410)
             execute.assert_awaited_once()
 
+    def test_trusted_automation_remembers_opt_in_and_can_be_revoked(self):
+        execute = AsyncMock(return_value={'success': True, 'message': 'Outgoing message verified'})
+        self.client.put('/api/settings', headers=self.headers, json={'automation_enabled': True, 'setup_completed': True})
+        with patch.object(main, 'execute_action', execute):
+            output = events(self.post('/command/stream', json={'command': 'WhatsApp Test Contact: Hello'}))
+            self.assertEqual(output[-1]['type'], 'done')
+            execute.assert_awaited_once()
+            self.client.put('/api/settings', headers=self.headers, json={'automation_enabled': False, 'setup_completed': True})
+            output = events(self.post('/command/stream', json={'command': 'WhatsApp Test Contact: Hello'}))
+            self.assertEqual(output[-1]['type'], 'approval')
+            self.assertEqual(execute.await_count, 1)
+
+    def test_explicit_memory_persists_across_sessions_and_can_be_forgotten(self):
+        output = events(self.post('/command/stream', json={'command': 'Remember that I prefer short explanations', 'session_id': 'one'}))
+        self.assertTrue(output[-1]['success'])
+        output = events(self.post('/command/stream', json={'command': 'What do you remember about me?', 'session_id': 'two'}))
+        self.assertIn('short explanations', output[-1]['reply'])
+        memories = self.client.get('/api/memories').json()
+        self.client.delete('/api/memories/' + memories[0]['id'], headers=self.headers)
+        self.assertEqual(self.client.get('/api/memories').json(), [])
+
     def test_cancel_and_expire_approval(self):
         result = events(self.post('/command/stream', json={'command': 'WhatsApp Rahul: Hello'}))[-1]
         self.assertTrue(self.post('/approvals/' + result['approval_id'], json={'approve': False}).json()['cancelled'])
@@ -182,8 +203,10 @@ class AssistantTests(unittest.TestCase):
         with patch.object(executor, 'process', process):
             asyncio.run(executor._execute(Action(action='google_search', target='a&b #c')))
             self.assertEqual(process.call_args.args, ('open', 'https://www.google.com/search?q=a%26b%20%23c'))
-            asyncio.run(executor._execute(Action(action='open_app', target='Notes" & malicious')))
-            self.assertEqual(process.call_args.args, ('open', '-a', 'Notes" & malicious'))
+            process.reset_mock()
+            with self.assertRaisesRegex(ValueError, 'could not find'):
+                asyncio.run(executor._execute(Action(action='open_app', target='Notes" & malicious')))
+            process.assert_not_awaited()
         with self.assertRaises(ValueError):
             asyncio.run(executor._execute(Action(action='open_website', target='file:///etc/passwd')))
         with self.assertRaises(ValueError):

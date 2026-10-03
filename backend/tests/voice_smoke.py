@@ -1,4 +1,6 @@
-"""Hands-free loop + real PCM amplitude visualization, with no desktop actions."""
+"""Browser integration: real PCM motion, barge-in and a hands-free document lesson.
+Recognition text and server responses are fixtures. No desktop actions or messages.
+"""
 import asyncio
 import io
 import json
@@ -15,24 +17,22 @@ window.SpeechRecognition = class {
   constructor() { window.voiceInstances.push(this); }
   start() { this.active = true; this.onstart?.(); }
   abort() { this.active = false; this.onend?.(); }
+  interim(text) { const r = [{transcript: text}]; r.isFinal = false; this.onresult?.({results: [r]}); }
   finish(text) {
-    const result = [{transcript: text}]; result.isFinal = true;
-    this.onresult?.({results: [result]}); this.active = false; this.onend?.();
+    const r = [{transcript: text}]; r.isFinal = true;
+    this.onresult?.({results: [r]}); this.active = false; this.onend?.();
   }
 };
 '''
 SIGNAL = "parseFloat(getComputedStyle(document.querySelector('.vc-instrument')).getPropertyValue('--audio-level'))"
+ACTIVE = 'window.voiceInstances.some(r => r.active)'
 
-def pcm(interrupted=False):
+def pcm(duration=3, interrupted=False):
     buffer = io.BytesIO()
     with wave.open(buffer, 'wb') as output:
         output.setnchannels(1); output.setsampwidth(2); output.setframerate(22050)
-        samples = []
-        for i in range(22050 * 3):
-            t = i / 22050
-            audible = not interrupted or .2 < t < .9 or 1.7 < t < 2.5
-            samples.append(struct.pack('<h', int(9000 * math.sin(2 * math.pi * 320 * t)) if audible else 0))
-        output.writeframes(b''.join(samples))
+        output.writeframes(b''.join(struct.pack('<h', int(9000 * math.sin(2 * math.pi * 320 * i / 22050))
+            if not interrupted or i / 22050 < .9 or i / 22050 > 1.7 else 0) for i in range(int(22050 * duration))))
     return buffer.getvalue()
 
 async def main():
@@ -40,101 +40,96 @@ async def main():
         microphone = Path(tmp) / 'microphone.wav'
         microphone.write_bytes(pcm())
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True, args=[
-                '--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream',
-                f'--use-file-for-fake-audio-capture={microphone}', '--mute-audio',
-            ])
-            page = await browser.new_page(viewport={'width': 1440, 'height': 960})
+            browser = await p.chromium.launch(headless=True, args=['--use-fake-ui-for-media-stream',
+                '--use-fake-device-for-media-stream', f'--use-file-for-fake-audio-capture={microphone}', '--mute-audio'])
+            page = await browser.new_page(viewport={'width':1440, 'height':960})
             await page.add_init_script(MOCK_RECOGNITION)
-            errors, commands, speeches = [], [], []
-            speech_requested = asyncio.Event()
-            release_audio = asyncio.Event()
+            errors, commands, speeches, answers = [], [], [], []
+            docs = []
+            doc = {'id':'voice-doc','name':'Voice lesson.txt','pages':1,'characters':150}
+            quiz = {'id':'voice-quiz','name':doc['name'],'answers':{},'questions':[
+                {'id':'q1','question':'What gives plants energy?','page':1},
+                {'id':'q2','question':'What pulls objects toward Earth?','page':1}]}
             page.on('pageerror', lambda error: errors.append(str(error)))
 
-            async def command(route):
-                commands.append(route.request.post_data_json)
-                events = [{'type': 'plan', 'reply': 'Hello from the voice test.', 'actions': []},
-                          {'type': 'done', 'reply': 'Hello from the voice test.', 'success': True}]
-                if commands[-1]['command'] == 'Send a test message':
-                    events = [{'type': 'approval', 'approval_id': 'voice-test-only', 'reply': 'Review this test message.',
-                               'actions': [{'action': 'whatsapp_send', 'target': 'Test contact', 'message': 'A test message'}]}]
-                body = ''.join('data: ' + json.dumps(event) + '\n\n' for event in events)
-                await route.fulfill(content_type='text/event-stream', body=body)
+            async def routes(route):
+                path = route.request.url.split('/api')[-1]
+                if path == '/status':
+                    return await route.fulfill(json={'token':'test-only','ai':{'ready':True,'models':['test']},
+                        'settings':{'model':'test','speech_rate':175,'automation_enabled':True,'setup_completed':True,'auto_tutor':True}})
+                if path in ['/history','/routines','/memories']: return await route.fulfill(json=[])
+                if path == '/documents':
+                    if route.request.method == 'POST': docs.append(doc); return await route.fulfill(json=doc)
+                    return await route.fulfill(json=docs)
+                if path == '/documents/voice-doc/quiz': return await route.fulfill(json=quiz)
+                if path == '/quizzes/voice-quiz/answer':
+                    answer = route.request.post_data_json; answers.append(answer)
+                    done = answer['question_id'] == 'q2'
+                    return await route.fulfill(json={'score':2 if not done else 0, 'feedback':'Sunlight is right.' if not done else 'Gravity pulls objects toward Earth.',
+                        'spoken_feedback':'Correct. Sunlight gives plants energy.' if not done else 'Not quite. Gravity pulls objects toward Earth. You finished with 2 out of 4 points.',
+                        'completed':done, 'reference':'sunlight' if not done else 'gravity'})
+                if path == '/command/stream':
+                    commands.append(route.request.post_data_json)
+                    events = [{'type':'plan','reply':'Hello from the voice test.','actions':[]},
+                              {'type':'done','reply':'Hello from the voice test.','success':True}]
+                    return await route.fulfill(content_type='text/event-stream', body=''.join('data: '+json.dumps(e)+'\n\n' for e in events))
+                if path == '/speech/audio':
+                    speeches.append(route.request.post_data_json['text'])
+                    return await route.fulfill(content_type='audio/wav', body=pcm(.55 if docs else 3, interrupted=not docs))
+                if path in ['/stop','/speech/stop']: return await route.fulfill(json={'stopped':True})
+                await route.fulfill(status=404, json={'detail':'Unexpected test request '+path})
 
-            async def speech(route):
-                speeches.append(route.request.post_data_json)
-                speech_requested.set()
-                await release_audio.wait()
-                await route.fulfill(content_type='audio/wav', body=pcm(interrupted=True))
-
-            await page.route('**/api/command/stream', command)
-            await page.route('**/api/speech/audio', speech)
-            await page.route('**/api/approvals/voice-test-only', lambda route: route.fulfill(json={'cancelled': True}))
+            await page.route('**/api/**', routes)
             await page.goto('http://127.0.0.1:8000')
-            start = page.get_by_role('button', name='Start listening', exact=True)
-            await start.click()
-            await page.locator('[data-voice-state="listening"]').wait_for()
-            await page.wait_for_function(SIGNAL + ' > 0.15')
-            await page.screenshot(path='/tmp/apple-listening.png', full_page=True)
+            await page.get_by_role('button', name='Start listening', exact=True).click()
+            await page.wait_for_function(SIGNAL + ' > .15')
             await page.evaluate("window.voiceInstances.at(-1).finish('Hello APPLE')")
-            await asyncio.wait_for(speech_requested.wait(), 10)
-            assert commands[0]['command'] == 'Hello APPLE'
-            assert not await page.evaluate('window.voiceInstances.some(r => r.active)')
-            release_audio.set()
             await page.locator('[data-voice-state="speaking"]').wait_for()
-            await page.wait_for_function(SIGNAL + ' > 0.15')
-            await page.screenshot(path='/tmp/apple-speaking.png', full_page=True)
-            # The actual audio has a silent gap, so animation must settle while
-            # still speaking, then rise again with the next PCM segment.
-            await page.wait_for_function(SIGNAL + ' < 0.02 && !!document.querySelector(\'[data-voice-state="speaking"]\')')
-            await page.wait_for_function(SIGNAL + ' > 0.15 && !!document.querySelector(\'[data-voice-state="speaking"]\')')
-            await page.locator('[data-voice-state="listening"]').wait_for()
-            assert await page.evaluate('window.voiceInstances.at(-1).active')
-            await page.evaluate("window.voiceInstances.at(-1).finish('Send a test message')")
-            await page.get_by_text('Ready for your review', exact=True).wait_for()
-            assert not await page.evaluate('window.voiceInstances.some(r => r.active)')
-            await page.get_by_role('button', name='Cancel', exact=True).click()
-            await page.locator('[data-voice-state="listening"]').wait_for()
+            await page.wait_for_function(ACTIVE)
+            # Real PCM silence must settle even though the mic remains active.
+            await page.wait_for_function(SIGNAL + ' < .02 && !!document.querySelector(\'[data-voice-state="speaking"]\')')
+            await page.wait_for_function(SIGNAL + ' > .15 && !!document.querySelector(\'[data-voice-state="speaking"]\')')
+            await page.evaluate("window.voiceInstances.at(-1).interim('Hello from the voice test')")
+            assert await page.locator('[data-voice-state="speaking"]').count()
+            await page.evaluate("window.voiceInstances.at(-1).interim('Actually explain gravity')")
+            await page.locator('[data-voice-state="speaking"]').wait_for(state='hidden')
+            assert await page.evaluate(ACTIVE)
+            await page.evaluate("window.voiceInstances.at(-1).finish('Actually explain gravity')")
+            await page.wait_for_function('!!document.querySelector(\'[data-voice-state="speaking"]\')')
+            assert [c['command'] for c in commands] == ['Hello APPLE','Actually explain gravity']
+            await page.wait_for_function(ACTIVE)
+            await page.evaluate("window.voiceInstances.at(-1).finish('stop listening')")
+            await page.get_by_role('button', name='Start listening', exact=True).wait_for()
+            assert not await page.evaluate(ACTIVE)
+
+            # Navigation really starts hidden and is reachable by keyboard and hover.
+            await page.keyboard.press('Tab')
+            await page.get_by_role('button', name='Show navigation').focus()
+            await page.get_by_role('button', name='Knowledge library', exact=True).click()
+            await page.locator('input[type=file]').set_input_files({'name':doc['name'],'mimeType':'text/plain',
+                'buffer':b'Plants use sunlight for energy. Gravity pulls objects toward Earth.'})
+            lesson = page.get_by_role('region', name='Voice lesson')
+            await lesson.get_by_role('heading', name='What gives plants energy?').wait_for()
+            await page.wait_for_function(ACTIVE)
+            await page.evaluate("window.voiceInstances.at(-1).finish('Sunlight')")
+            await lesson.get_by_role('heading', name='What pulls objects toward Earth?').wait_for()
+            await page.wait_for_function(ACTIVE)
+            await page.evaluate("window.voiceInstances.at(-1).finish('Magnets')")
+            await lesson.get_by_role('heading', name='Lesson complete.').wait_for()
+            await lesson.get_by_text('2 / 4 points', exact=True).wait_for()
+            assert [a['answer'] for a in answers] == ['Sunlight','Magnets']
+            assert any('Correct.' in t for t in speeches) and any('Not quite.' in t for t in speeches)
+            assert len(commands) == 2, 'Quiz answers must not become desktop commands'
+            await page.screenshot(path='/tmp/apple-voice-teacher.png', full_page=True)
+            await page.get_by_role('button', name='End lesson', exact=True).click()
             await page.get_by_role('button', name='End session', exact=True).click()
-            assert not await page.evaluate('window.voiceInstances.some(r => r.active)')
-            assert len(commands) == 2
-            await page.wait_for_function(SIGNAL + ' < 0.02')
-            await start.click()
-            await page.locator('[data-voice-state="listening"]').wait_for()
+            await page.get_by_role('button', name='Start listening', exact=True).click()
+            await page.wait_for_function(ACTIVE)
             await page.evaluate("window.voiceInstances.at(-1).onerror({error:'not-allowed'})")
             await page.get_by_role('alert').filter(has_text='Microphone permission was denied').wait_for()
-            assert not await page.evaluate('window.voiceInstances.some(r => r.active)')
-            # Grant microphone access only after output has started. A stale
-            # permission request must release its tracks without stealing the
-            # playback analyser or stopping the waveform for the whole reply.
-            late = await browser.new_page()
-            late.on('pageerror', lambda error: errors.append(str(error)))
-            await late.add_init_script(MOCK_RECOGNITION + '''
-                const acquire = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
-                window.lateStreams = [];
-                navigator.mediaDevices.getUserMedia = async (...args) => {
-                    const media = await acquire(...args);
-                    window.lateStreams.push(media);
-                    await new Promise(resolve => { window.releaseLateMic = resolve; });
-                    return media;
-                };
-            ''')
-            await late.route('**/api/command/stream', command)
-            await late.route('**/api/speech/audio', speech)
-            await late.goto('http://127.0.0.1:8000')
-            await late.get_by_role('button', name='Start listening', exact=True).click()
-            await late.wait_for_function('typeof window.releaseLateMic === "function"')
-            await late.evaluate("window.voiceInstances.at(-1).finish('Hello again')")
-            await late.locator('[data-voice-state="speaking"]').wait_for()
-            await late.wait_for_function(SIGNAL + ' > 0.15')
-            await late.evaluate('window.releaseLateMic()')
-            await late.wait_for_function('window.lateStreams.every(s => s.getTracks().every(t => t.readyState === "ended"))')
-            await late.wait_for_function(SIGNAL + ' < 0.02 && !!document.querySelector(\'[data-voice-state="speaking"]\')')
-            await late.wait_for_function(SIGNAL + ' > 0.15 && !!document.querySelector(\'[data-voice-state="speaking"]\')')
-            await late.get_by_role('button', name='End session', exact=True).click()
-            await late.close()
+            assert not await page.evaluate(ACTIVE)
             assert not errors, errors
             await browser.close()
-            print('PASS: real microphone/PCM levels, silence sync, delayed permission cleanup, automatic submission, audio completion, approval pause, Stop and permission errors.')
+            print('PASS: PCM/mic motion, silence, echo rejection, interruption without ending listening, voice Stop, hidden navigation, upload → spoken questions → oral answers → grading → next question → final score, permission errors.')
 
 asyncio.run(main())

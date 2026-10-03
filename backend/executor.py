@@ -5,11 +5,14 @@ from pathlib import Path
 from urllib.parse import quote, urlparse
 from models import Action
 from whatsapp_native import whatsapp as native_whatsapp
+from desktop_apps import open_installed
+from desktop_automation import desktop_action
 
 APP_MAP = {'chrome': 'Google Chrome', 'vs code': 'Visual Studio Code', 'vscode': 'Visual Studio Code',
            'whatsapp': 'WhatsApp', 'whats app': 'WhatsApp', 'what’s app': 'WhatsApp'}
 DESKTOP_LOCK = asyncio.Lock()
-REVIEW_ACTIONS = {'whatsapp_send', 'type_text', 'press_key', 'run_shortcut'}
+REVIEW_ACTIONS = {'whatsapp_send', 'type_text', 'press_key', 'run_shortcut',
+                  'search_app', 'click_control', 'set_field'}
 
 
 async def process(*args, timeout=20):
@@ -44,11 +47,11 @@ async def execute_action(action: Action):
 async def _execute(a):
     target = a.target.strip()
     app = APP_MAP.get(target.lower(), target)
+    if a.action in {'list_apps', 'inspect_app', 'search_app', 'click_control', 'set_field'}:
+        return await desktop_action(a, process)
     if a.action == 'open_app':
-        if app == 'WhatsApp':
-            return await native_whatsapp('', '', False, process)
-        await process('open', '-a', app)
-        return {'message': f'Opened {app}.'}
+        installed = await open_installed(target, process)
+        return {'message': f'Opened {installed.name}.', 'app': installed.public()}
     if a.action in {'open_website', 'google_search', 'youtube_search'}:
         if a.action == 'google_search':
             url = 'https://www.google.com/search?q=' + quote(target, safe='')
@@ -118,7 +121,7 @@ if name of first application process whose frontmost is true is not appName then
         await script(source + 'end tell\nend run', app, value)
         return {'message': f'{"Typed text" if a.action == "type_text" else "Pressed " + a.message} in {app}. Check the destination field.'}
     if a.action in {'whatsapp_open', 'whatsapp_send'}:
-        return await whatsapp(target, a.message, a.action == 'whatsapp_send')
+        return await whatsapp(target, a.message, a.action == 'whatsapp_send', expected_name=a.control)
     raise ValueError('Unsupported action.')
 
 
@@ -126,5 +129,5 @@ async def close_browser():
     """Compatibility lifecycle hook: native WhatsApp owns its own process."""
 
 
-async def whatsapp(contact, message, send):
-    return await native_whatsapp(contact, message, send, process)
+async def whatsapp(contact, message, send, *, expected_name=''):
+    return await native_whatsapp(contact, message, send, process, expected_name=expected_name)

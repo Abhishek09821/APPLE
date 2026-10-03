@@ -24,6 +24,11 @@ def normalise(value):
     return ' '.join(unicodedata.normalize('NFKC', text).casefold().split())
 
 
+def contact_key(value):
+    """Compare spoken names without decorative emoji; keep letters and digits."""
+    return ' '.join(''.join(c if c.isalnum() or c.isspace() else ' ' for c in normalise(value)).split())
+
+
 def phone_number(contact):
     """Only explicit international numbers, never infer a country code."""
     if re.fullmatch(r'\+?[1-9][0-9 ()\-]{6,22}', contact):
@@ -72,7 +77,7 @@ def unique(nodes, reason):
 def search_field(tree):
     return unique([
         n for n in tree.walk()
-        if n.enabled and (n.identifier == 'TokenizedSearchBar_TextView' or (
+        if n.enabled and (n.identifier in {'TokenizedSearchBar_TextView', 'PickerView_SearchBar'} or (
             n.role in {'AXTextField', 'AXSearchField', 'AXComboBox'}
             and any('search' in normalise(v) for v in (n.description, n.title, n.placeholder, n.identifier))))
     ], 'I could not identify WhatsApp’s chat search. Open its Chats tab, sign in if needed, and try again. No message was sent.')
@@ -100,6 +105,31 @@ def chat_region(tree, search):
 
 
 def exact_chat(tree, contact):
+    native_candidates = []
+    for node in tree.walk():
+        if node.identifier == 'PickerView_ContactCell' and node.role == 'AXStaticText':
+            name = node.title or node.description
+            if name:
+                native_candidates.append((node, name))
+        elif node.identifier in {'ChatListSearchView_ChatResult', 'ChatListSearchView_ContactResult'} and node.role == 'AXButton':
+            name = node.title or node.description
+            if name:
+                native_candidates.append((node, name))
+    if native_candidates or any(n.identifier == 'PickerView_SearchBar' for n in tree.walk()):
+        query = contact_key(contact)
+        exact = [(n, name) for n, name in native_candidates if contact_key(name) == query]
+        # Spoken first names may resolve to one saved full name. Only consider
+        # real contact rows; never navigation filters, authors, or message text.
+        matches = exact or [(n, name) for n, name in native_candidates
+                            if len(query) >= 2 and re.match(re.escape(query) + r'(?:\s|$)', contact_key(name))]
+        if len(matches) == 1:
+            return matches[0][0]
+        if len(matches) > 1:
+            names = list(dict.fromkeys(name for _, name in matches))[:5]
+            raise ValueError('I found more than one matching WhatsApp contact: ' + ', '.join(names) + '. Say the full contact name. No message was sent.')
+        names = list(dict.fromkeys(name for _, name in native_candidates))[:3]
+        suggestion = ' Search results include ' + ', '.join(names) + '. Say the full contact name.' if names else ' Check the saved name or use their international phone number.'
+        raise ValueError(f'I could not find a WhatsApp contact matching “{contact}”.' + suggestion + ' No message was sent.')
     region = chat_region(tree, search_field(tree))
     candidates = []
     for node in region.walk():
@@ -108,7 +138,7 @@ def exact_chat(tree, contact):
         # Never interpret matching message text or the search field as a contact.
         if node.role not in {'AXStaticText', 'AXButton', 'AXRow', 'AXCell'}:
             continue
-        if node.role == 'AXButton' and any(normalise(p.description) == 'search results' for p in node.ancestors()):
+        if node.role == 'AXButton' and not node.identifier and any(normalise(p.description) == 'search results' for p in node.ancestors()):
             candidates.append(node)
             continue
         ancestry = (node, *node.ancestors())
@@ -121,6 +151,8 @@ def exact_chat(tree, contact):
 
 def verified_header(tree, contact):
     """Require an exact recipient outside both the chat list and message rows."""
+    if any(n.role == 'AXSheet' for n in tree.walk()):
+        raise ValueError('Close the WhatsApp dialog before sending. No message was sent.')
     composer = message_field(tree)
     native_headers = [n for n in tree.walk() if n.identifier == 'NavigationBar_HeaderViewButton']
     if native_headers:
@@ -149,6 +181,15 @@ def verified_header(tree, contact):
             candidates.append(node)
     unique(candidates, 'I could not verify the selected WhatsApp recipient. Use the exact saved contact name. No message was sent.')
     return composer
+
+
+def verified_recipient(tree, contact, expected_name=''):
+    try:
+        return verified_header(tree, contact)
+    except ValueError:
+        if expected_name:
+            return verified_header(tree, expected_name)
+        raise
 
 
 def send_button(tree, composer):
@@ -188,6 +229,7 @@ class NativeAX:
     def __init__(self, pid, process):
         self.pid, self.process = pid, process
         self.contact = ''
+        self.expected_name = ''
 
     async def call(self, operation, **kwargs):
         try:
@@ -210,23 +252,33 @@ class NativeAX:
     async def show_search(self):
         await self.call('show_search')
 
+    async def show_contacts(self):
+        await self.call('show_contacts')
+
+    async def close_contacts(self):
+        await self.call('close_contacts')
+
     def data(self, node):
         return {key: getattr(node, key) for key in ('handle', 'role', 'identifier', 'title', 'description', 'value')}
 
     async def set_value(self, node, value):
         await self.call('set_value', node=self.data(node), value=value,
-                        contact=self.contact if node.identifier == 'ChatBar_ComposerTextView' else '')
+                        contact=self.contact if node.identifier == 'ChatBar_ComposerTextView' else '',
+                        expected_name=self.expected_name if node.identifier == 'ChatBar_ComposerTextView' else '')
 
     async def press(self, node, *, draft=None):
-        extra = {'draft': draft, 'contact': self.contact} if draft is not None else {}
+        extra = {'draft': draft, 'contact': self.contact, 'expected_name': self.expected_name} if draft is not None else {}
         await self.call('press', node=self.data(node), **extra)
 
 
-async def native_chat(ax, contact, message, send, *, phone=False):
+async def native_chat(ax, contact, message, send, *, phone=False, expected_name=''):
     if not phone:
-        if hasattr(ax, 'show_search'):
+        using_picker = hasattr(ax, 'show_contacts')
+        if using_picker:
+            await ax.show_contacts()
+        elif hasattr(ax, 'show_search'):
             await ax.show_search()
-        await ax.set_value(search_field(await ax.snapshot()), contact)
+        await ax.set_value(search_field(await ax.snapshot()), contact_key(contact))
         await asyncio.sleep(0.35)
         # Wait briefly for native search; never spend 90 seconds on a browser login.
         row = None
@@ -236,32 +288,44 @@ async def native_chat(ax, contact, message, send, *, phone=False):
                 break
             except ValueError:
                 if attempt == 5:
+                    if using_picker:
+                        await ax.close_contacts()
                     raise
                 await asyncio.sleep(0.2)
         await ax.press(row)
         await asyncio.sleep(0.2)
-    tree = await ax.snapshot()
-    composer = verified_header(tree, contact)
+        if row.identifier in {'PickerView_ContactCell', 'ChatListSearchView_ChatResult', 'ChatListSearchView_ContactResult'}:
+            contact = row.title or row.description
+            ax.contact = contact
+    for attempt in range(4 if phone else 1):
+        tree = await ax.snapshot()
+        try:
+            composer = verified_recipient(tree, contact, expected_name)
+            break
+        except ValueError:
+            if attempt == (3 if phone else 0):
+                raise
+            await asyncio.sleep(.2)
     if not send:
-        return {'message': f'Opened {contact} in the WhatsApp app.'}
+        return {'message': f'Opened {expected_name or contact} in the WhatsApp app.'}
     if composer.value.strip():
         raise ValueError('This WhatsApp chat already has a draft. Clear or send it in WhatsApp before trying again. No message was sent.')
     before = outgoing_messages(tree, message)
     # Recheck recipient and draft immediately before modifying the selected field.
-    composer = verified_header(await ax.snapshot(), contact)
+    composer = verified_recipient(await ax.snapshot(), contact, expected_name)
     if composer.value.strip():
         raise ValueError('A WhatsApp draft appeared. I left it untouched. No message was sent.')
     await ax.set_value(composer, message)
     await asyncio.sleep(0.1)
     tree = await ax.snapshot()
-    composer = verified_header(tree, contact)
+    composer = verified_recipient(tree, contact, expected_name)
     if composer.value != message:
         raise ValueError('WhatsApp’s draft does not match the approved message. Check the draft; nothing was sent.')
     send_button(tree, composer)
     # Yield before the single irreversible action so Stop can cancel it.
     await asyncio.sleep(0)
     current_tree = await ax.snapshot()
-    current = verified_header(current_tree, contact)
+    current = verified_recipient(current_tree, contact, expected_name)
     if current.value != message:
         raise ValueError('The WhatsApp draft changed. Nothing was sent.')
     await ax.press(send_button(current_tree, current), draft=message)
@@ -269,15 +333,15 @@ async def native_chat(ax, contact, message, send, *, phone=False):
         await asyncio.sleep(0.25)
         try:
             tree = await ax.snapshot()
-            current = verified_header(tree, contact)
+            current = verified_recipient(tree, contact, expected_name)
         except (ValueError, RuntimeError, PermissionError, asyncio.TimeoutError):
             break
         if not current.value and outgoing_messages(tree, message) > before:
-            return {'message': f'WhatsApp displayed an outgoing message to {contact}. Delivery is not yet verified.'}
+            return {'message': f'WhatsApp displayed an outgoing message to {expected_name or contact}. Delivery is not yet verified.'}
     raise RuntimeError('I pressed Send in WhatsApp, but could not verify an outgoing message. Check the chat before retrying to avoid a duplicate.')
 
 
-async def whatsapp(contact, message, send, process):
+async def whatsapp(contact, message, send, process, *, expected_name=''):
     contact = contact.strip()
     if len(contact) > 120 or any(unicodedata.category(c) == 'Cc' for c in contact):
         raise ValueError('Use a single contact name or international phone number, without line breaks or control characters.')
@@ -290,11 +354,11 @@ async def whatsapp(contact, message, send, process):
     if not contact:
         return {'message': 'Opened the WhatsApp app.'}
     number = phone_number(contact)
-    if number:
+    expected_name = expected_name.strip() if number else ''
+    if number and not send and not expected_name:
         # Do not prefill text: this must never replace an existing chat draft.
         await process('open', '-b', BUNDLE_ID, f'whatsapp://send?phone={number}')
-        if not send:
-            return {'message': f'Opened WhatsApp for +{number}. Check the chat in the app.'}
+        return {'message': f'Opened WhatsApp for +{number}. Check the chat in the app.'}
     await asyncio.sleep(0.2)
     # Verify the process belongs to WhatsApp.app, never an unrelated same-name app.
     candidates = await process('pgrep', '-x', 'WhatsApp')
@@ -309,4 +373,9 @@ async def whatsapp(contact, message, send, process):
         raise RuntimeError('WhatsApp is still opening. Wait until its Chats screen appears, then try again. No message was sent.')
     ax = NativeAX(pid, process)
     ax.contact = contact
-    return await native_chat(ax, contact, message, send, phone=bool(number))
+    ax.expected_name = expected_name.strip()
+    if number:
+        await ax.close_contacts()
+        await process('open', '-b', BUNDLE_ID, f'whatsapp://send?phone={number}')
+        await asyncio.sleep(.15)
+    return await native_chat(ax, contact, message, send, phone=bool(number), expected_name=ax.expected_name)

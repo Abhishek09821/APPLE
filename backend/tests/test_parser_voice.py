@@ -18,7 +18,7 @@ class SpokenCommandTests(unittest.TestCase):
         plan = ai_parser.basic_plan(command)
         self.assertIsNotNone(plan, command)
         self.assertEqual(len(plan.actions), 1, command)
-        self.assertEqual(plan.actions[0].model_dump(), {
+        self.assertEqual(plan.actions[0].model_dump(include={'action', 'target', 'message'}), {
             'action': 'whatsapp_send', 'target': recipient, 'message': message,
         })
 

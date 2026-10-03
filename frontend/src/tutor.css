@@ -1,0 +1,126 @@
+.voice-tutor {
+  position: relative;
+  z-index: 2;
+  width: min(640px, calc(100% - 36px));
+  margin: 18px auto 0;
+  padding: 22px 25px;
+  border: 1px solid #ffffff16;
+  background: #151925bb;
+  backdrop-filter: blur(24px);
+  border-radius: 22px;
+  box-shadow: 0 20px 60px #0003;
+}
+.tutor-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: #b8caff;
+  font-size: 9px;
+  letter-spacing: 0.18em;
+}
+.tutor-heading span {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.tutor-heading button {
+  display: grid;
+  place-items: center;
+  padding: 7px;
+  background: transparent;
+  color: #939bad;
+  border: 0;
+  cursor: pointer;
+}
+.tutor-document {
+  font-size: 12px;
+  color: #929bac;
+  margin: 10px 0 20px;
+  overflow-wrap: anywhere;
+}
+.voice-tutor h2 {
+  font-size: 21px;
+  line-height: 1.45;
+  font-weight: 500;
+  margin: 12px 0;
+}
+.voice-tutor p {
+  line-height: 1.65;
+  font-size: 13px;
+}
+.voice-tutor p svg {
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 8px;
+}
+.tutor-answer {
+  color: #aab5ca;
+  min-height: 20px;
+}
+.tutor-feedback {
+  border-left: 2px solid #9bbbe5;
+  padding-left: 14px;
+  margin: 16px 0;
+  color: #c8d0de;
+}
+.tutor-feedback strong {
+  font-size: 12px;
+  color: #c6dfdc;
+}
+.automation-setup {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  color: inherit;
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  background: #05060be0;
+  backdrop-filter: blur(20px);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+.setup-card {
+  width: min(430px, 100%);
+  border: 1px solid #ffffff20;
+  background: #11151e;
+  border-radius: 28px;
+  padding: 34px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 18px;
+}
+.setup-card h2 {
+  font-weight: 500;
+  font-size: 26px;
+  margin: 0;
+}
+.setup-card p {
+  font-size: 13px;
+  line-height: 1.65;
+  color: #aab4c7;
+  margin: 0;
+}
+.setup-card .primary-button {
+  width: 100%;
+  justify-content: center;
+}
+.setup-card .subtle-button {
+  align-self: center;
+}
+@media (max-width: 620px) {
+  .voice-tutor {
+    padding: 18px;
+  }
+  .document-row {
+    flex-wrap: wrap;
+  }
+  .document-info {
+    min-width: 65%;
+  }
+}

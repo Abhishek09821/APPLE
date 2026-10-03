@@ -7,7 +7,8 @@ export function useAudioEngine() {
   const context = useRef(null)
   const active = useRef(null)
   const generation = useRef(0)
-  const meter = useRef(null)
+  const meters = useRef({})
+  const levels = useRef({ input: 0, output: 0 })
   const [speaking, setSpeaking] = useState(false)
 
   const prepare = useCallback(async () => {
@@ -21,28 +22,30 @@ export function useAudioEngine() {
   }, [])
 
   const measure = useCallback(
-    (analyser) => {
+    (analyser, channel = 'output') => {
       const token = {}
-      if (meter.current) cancelAnimationFrame(meter.current.frame)
-      meter.current = token
+      if (meters.current[channel]) cancelAnimationFrame(meters.current[channel].frame)
+      meters.current[channel] = token
       const samples = new Float32Array(analyser.fftSize)
       const sample = () => {
-        if (meter.current !== token) return
+        if (meters.current[channel] !== token) return
         analyser.getFloatTimeDomainData(samples)
         let sum = 0
         for (const value of samples) sum += value * value
         // Noise floor + RMS. No fabricated volume when the source is silent.
         const rms = Math.sqrt(sum / samples.length)
         const target = Math.min(1, Math.max(0, rms - 0.006) * 7)
-        level.set(level.get() * 0.3 + target * 0.7)
+        levels.current[channel] = levels.current[channel] * 0.3 + target * 0.7
+        level.set(active.current?.source ? levels.current.output : levels.current.input)
         token.frame = requestAnimationFrame(sample)
       }
       sample()
       return () => {
         cancelAnimationFrame(token.frame)
-        if (meter.current === token) {
-          meter.current = null
-          level.set(0)
+        if (meters.current[channel] === token) {
+          delete meters.current[channel]
+          levels.current[channel] = 0
+          level.set(active.current?.source ? levels.current.output : levels.current.input)
         }
       }
     },
@@ -134,7 +137,7 @@ export function useAudioEngine() {
         analyser = ctx.createAnalyser()
         analyser.fftSize = 512
         source.connect(analyser) // Deliberately no connection to speakers.
-        release = measure(analyser)
+        release = measure(analyser, 'input')
         signal?.addEventListener('abort', cleanup, { once: true })
         return cleanup
       } catch (error) {
@@ -148,7 +151,7 @@ export function useAudioEngine() {
   useEffect(
     () => () => {
       stop()
-      if (meter.current) cancelAnimationFrame(meter.current.frame)
+      Object.values(meters.current).forEach((item) => cancelAnimationFrame(item.frame))
       context.current?.close()
     },
     [stop],

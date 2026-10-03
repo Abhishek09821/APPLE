@@ -7,6 +7,8 @@ export class VoiceSession {
     onTranscript,
     onCommand,
     onError,
+    acceptTranscript = () => true,
+    onSpeech = () => {},
     schedule = (fn, delay) => setTimeout(fn, delay),
     cancel = (id) => clearTimeout(id),
   }) {
@@ -16,6 +18,8 @@ export class VoiceSession {
       onTranscript,
       onCommand,
       onError,
+      acceptTranscript,
+      onSpeech,
       schedule,
       cancel,
     })
@@ -62,13 +66,14 @@ export class VoiceSession {
   restart() {
     this.cancel(this.timer)
     if (this.enabled && !this.suspended && !this.pending && !this.rec)
-      this.timer = this.schedule(() => this.start(), 450)
+      this.timer = this.schedule(() => this.start(), 180)
   }
   start() {
     if (!this.enabled || this.suspended || this.pending || this.rec) return
     const rec = new this.Recognition()
     this.rec = rec
     let finalText = ''
+    let heardSpeech = false
     rec.lang = navigator.language || 'en-US'
     rec.interimResults = true
     rec.continuous = false
@@ -78,12 +83,19 @@ export class VoiceSession {
     rec.onresult = (event) => {
       if (this.rec !== rec) return
       const results = Array.from(event.results)
-      this.onTranscript(
-        results
-          .map((r) => r[0].transcript)
-          .join(' ')
-          .trim(),
-      )
+      const transcript = results
+        .map((r) => r[0].transcript)
+        .join(' ')
+        .trim()
+      if (!transcript || !this.acceptTranscript(transcript)) {
+        finalText = ''
+        return
+      }
+      if (!heardSpeech) {
+        heardSpeech = true
+        this.onSpeech(transcript)
+      }
+      this.onTranscript(transcript)
       finalText = results
         .filter((r) => r.isFinal)
         .map((r) => r[0].transcript)

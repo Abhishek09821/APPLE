@@ -40,6 +40,8 @@ export default function LibraryView({
   setInput,
   startQuiz,
   selectedDoc,
+  startVoiceLesson,
+  afterImport,
 }) {
   return (
     <div className="page-content">
@@ -159,7 +161,7 @@ export default function LibraryView({
             <strong>
               {working ? 'Working with your document…' : 'Drop a little knowledge here'}
             </strong>
-            <span>Choose a file or drag it in · PDF, TXT, MD · up to 20 MB</span>
+            <span>Choose a file or drag it in · PDF, DOCX, TXT, MD · up to 20 MB</span>
             <span className="upload-link">
               Browse files <ArrowUpRight size={13} />
             </span>
@@ -169,13 +171,12 @@ export default function LibraryView({
             onSubmit={(e) => {
               e.preventDefault()
               doWork(async () => {
-                await api('/documents/import', {
+                const document = await api('/documents/import', {
                   method: 'POST',
                   body: JSON.stringify({ path: filePath }),
                 })
                 setFilePath('')
-                await refresh()
-                setNotice('Document imported.')
+                await afterImport(document)
               })
             }}
           >
@@ -228,6 +229,13 @@ export default function LibraryView({
                     >
                       Ask
                       <ArrowUpRight size={13} />
+                    </button>
+                    <button
+                      className="secondary-button"
+                      disabled={working}
+                      onClick={() => startVoiceLesson(doc)}
+                    >
+                      Teach me aloud
                     </button>
                     <button
                       className="primary-button"

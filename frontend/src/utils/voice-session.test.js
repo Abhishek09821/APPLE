@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { VoiceSession } from './voice-session.js'
 
-function setup(onCommand = () => {}) {
+function setup(onCommand = () => {}, extra = {}) {
   const instances = [],
     commands = [],
     errors = []
@@ -39,6 +39,7 @@ function setup(onCommand = () => {}) {
     cancel: () => {
       scheduled = null
     },
+    ...extra,
   })
   return {
     session,
@@ -92,7 +93,7 @@ test('stop discards late recognition events and pending submission', async () =>
   assert.deepEqual(s.commands, [])
   assert.equal(s.instances.length, 1)
 })
-test('microphone stays paused throughout a request and spoken reply', async () => {
+test('microphone stays paused while a command is pending and explicitly suspended', async () => {
   let resolve
   const s = setup(
     () =>
@@ -114,6 +115,25 @@ test('microphone stays paused throughout a request and spoken reply', async () =
   s.session.pause(false)
   s.tick()
   assert.equal(s.instances.length, 2)
+})
+test('interim user speech interrupts once while playback echoes do not submit', async () => {
+  const heard = []
+  const s = setup(() => {}, {
+    acceptTranscript: (text) => text !== 'My spoken reply',
+    onSpeech: (text) => heard.push(text),
+  })
+  s.session.enable()
+  const rec = s.instances[0]
+  rec.result('My spoken reply', false)
+  assert.deepEqual(heard, [])
+  rec.result('Wait a moment', false)
+  rec.result('Wait a moment please', false)
+  assert.deepEqual(heard, ['Wait a moment'])
+  assert.deepEqual(s.commands, [])
+  rec.result('Wait a moment please')
+  rec.onend()
+  await settle()
+  assert.deepEqual(s.commands, ['Wait a moment please'])
 })
 test('permission errors end the session without a restart loop', () => {
   const s = setup()

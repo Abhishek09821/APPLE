@@ -16,8 +16,13 @@ from models import CommandRequest, Settings, Routine, Plan
 from ai_parser import parse_command, model_status, ModelUnavailable
 from executor import execute_action, REVIEW_ACTIONS, close_browser
 from storage import put, get, list_records, delete, settings
-from knowledge import ingest, answer, make_quiz, public_quiz, grade_answer, MAX_BYTES
+from knowledge import ingest, answer, make_quiz, public_quiz, grade_answer, cancel_study_tasks, MAX_BYTES
 from speech import spoken_text, spoken_result, render_audio, cancel_synthesis
+from memory import save_fact
+from desktop_automation import permissions_status
+from executor import process
+from contacts import Contact, save_contact, resolve_whatsapp_action
+from app_agent import automate_app
 
 TOKEN = secrets.token_urlsafe(32)
 PENDING = {}
@@ -32,6 +37,7 @@ async def lifespan(app):
         task.cancel()
     await asyncio.gather(*ACTIVE, return_exceptions=True)
     await stop_speech()
+    await cancel_study_tasks()
     await close_browser()
 
 
@@ -77,6 +83,49 @@ async def save_settings(value: Settings):
     return value
 
 
+@app.get('/api/memories')
+async def memories():
+    return list_records('memory', 100)
+
+
+@app.get('/api/contacts')
+async def contacts():
+    return list_records('contact', 100)
+
+
+@app.post('/api/contacts')
+async def add_contact(value: Contact):
+    return save_contact(value)
+
+
+@app.put('/api/contacts/{contact_id}')
+async def update_contact(contact_id: str, value: Contact):
+    return save_contact(value, contact_id)
+
+
+@app.delete('/api/contacts/{contact_id}')
+async def remove_contact(contact_id: str):
+    delete('contact', contact_id)
+    return {'deleted': True}
+
+
+@app.get('/api/permissions')
+async def permissions():
+    return await permissions_status(process)
+
+
+@app.post('/api/permissions/accessibility')
+async def accessibility_settings():
+    await process('open', 'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility')
+    return {'opened': True}
+
+
+@app.delete('/api/memories/{memory_id}')
+async def remove_memory(memory_id: str):
+    delete('memory', memory_id)
+    return {'deleted': True}
+
+
 def remember(req, reply, **extra):
     return put('history', {'command': req.command, 'session_id': req.session_id, 'reply': reply, **extra})
 
@@ -86,8 +135,17 @@ async def run_plan(req, plan, emit):
     learned = None
     async with EXECUTION_LOCK:
         for i, action in enumerate(plan.actions):
+            action = resolve_whatsapp_action(action)
             await emit({'type': 'step', 'index': i, 'action': action.model_dump(), 'status': 'running'})
-            if action.action == 'learn_document':
+            if action.action == 'automate_app':
+                result = await automate_app(action, emit)
+            elif action.action == 'remember_fact':
+                fact = save_fact(action.target)
+                result = {'success': True, 'message': f'I’ll remember: {fact["text"]}'}
+            elif action.action == 'recall_memory':
+                facts = list_records('memory', 100)
+                result = {'success': True, 'message': '\n'.join(f['text'] for f in facts) if facts else 'You haven’t asked me to remember anything yet.'}
+            elif action.action == 'learn_document':
                 try:
                     learned = await import_path(ImportPath(path=action.target))
                     result = {'success': True, 'message': f'Added {learned["name"]} to your knowledge library ({learned["pages"]} pages). Ask me about it, or start a practice quiz in the Library.'}
@@ -131,8 +189,9 @@ async def prepare(req, emit):
         plan = Plan(reply=f'Running {routine["name"]}.', actions=actions)
     else:
         plan = await parse_command(req.command, req.session_id)
+    plan = plan.model_copy(update={'actions': [resolve_whatsapp_action(a) for a in plan.actions]})
     await emit({'type': 'plan', **plan.model_dump()})
-    if any(a.action in REVIEW_ACTIONS for a in plan.actions):
+    if not settings().automation_enabled and any(a.action in REVIEW_ACTIONS | {'automate_app'} for a in plan.actions):
         now = time.monotonic()
         for key in list(PENDING):
             if now - PENDING[key][2] > 600:
@@ -202,6 +261,7 @@ async def stop():
         task.cancel()
     PENDING.clear()
     await stop_speech()
+    await cancel_study_tasks()
     return {'stopped': True, 'message': 'Pending work stopped. Already completed actions cannot be undone.'}
 
 
