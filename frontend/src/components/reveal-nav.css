@@ -70,7 +70,8 @@
   padding: 8px var(--page-gutter) 0;
   display: flex;
   align-items: center;
-  gap: 28px;
+  gap: 20px;
+  justify-content: space-between;
 }
 .global-brand {
   display: flex;
@@ -90,11 +91,7 @@
   letter-spacing: 0.08em;
 }
 .global-nav-links {
-  display: flex;
-  justify-content: space-between;
-  flex: 1;
-  align-items: center;
-  gap: 15px;
+  display: contents;
 }
 .global-nav-links button {
   position: relative;
@@ -163,14 +160,12 @@
 }
 @media (max-width: 1100px) {
   .global-nav-inner {
-    gap: 18px;
+    gap: 12px;
   }
   .global-brand span {
     display: none;
   }
-  .global-nav-links {
-    gap: 12px;
-  }
+
   .global-nav-tools {
     gap: 0;
   }
@@ -243,5 +238,28 @@
   .global-nav-links button,
   .global-nav-links button::after {
     transition: none;
+  }
+}
+
+/* Home keeps a stable toolbar; its compact menu can expand on small screens. */
+.global-nav-tools .nav-home-menu {
+  display: none;
+}
+.nav-pinned .global-nav-inner {
+  padding-top: 0;
+  min-height: 58px;
+}
+.nav-pinned .global-nav-panel {
+  transition: none;
+}
+@media (max-width: 900px) {
+  .nav-pinned .global-nav-inner {
+    padding-block: 7px;
+  }
+  .nav-pinned:not(.nav-menu-open) .global-nav-links {
+    display: none;
+  }
+  .global-nav-tools .nav-home-menu {
+    display: grid;
   }
 }

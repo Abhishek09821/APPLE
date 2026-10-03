@@ -16,6 +16,9 @@
 .global-nav-spacer {
   flex: 0 0 28px;
 }
+.home-shell .global-nav-spacer {
+  flex-basis: 58px;
+}
 .workspace-owner {
   max-width: 210px;
   white-space: nowrap;

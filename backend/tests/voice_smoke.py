@@ -131,6 +131,28 @@ async def main(duplex=False):
                 await page.evaluate("window.voiceInstances.at(-1).finish('Hello from the voice test')")
                 await page.wait_for_function(ACTIVE)
                 assert len(commands) == 2
+            # Muting during real PCM playback must stop output, keep listening,
+            # suppress future replies, and let a later unmute restore speech.
+            await page.evaluate("window.voiceInstances.at(-1).finish('Check the speaker button')")
+            await page.locator('[data-voice-state="speaking"]').wait_for()
+            await page.get_by_role('button',name='Show navigation',exact=True).focus()
+            await page.keyboard.press('ArrowDown')
+            await page.get_by_role('button',name='Mute all sounds',exact=True).click()
+            await page.locator('[data-voice-state="speaking"]').wait_for(state='hidden')
+            await page.wait_for_function(ACTIVE)
+            assert await page.evaluate("window.voiceInstances.at(-1).track.id") == track_id
+            speech_count=len(speeches)
+            await page.evaluate("window.voiceInstances.at(-1).finish('Keep this reply silent')")
+            await page.get_by_text('Keep this reply silent',exact=True).wait_for()
+            await page.wait_for_function(ACTIVE)
+            assert len(speeches)==speech_count, 'A reply bypassed master mute'
+            await page.get_by_role('button',name='Show navigation',exact=True).focus()
+            await page.keyboard.press('ArrowDown')
+            await page.get_by_role('button',name='Unmute all sounds',exact=True).click()
+            await page.evaluate("window.voiceInstances.at(-1).finish('Speak again now')")
+            await page.locator('[data-voice-state="speaking"]').wait_for()
+            assert len(speeches)==speech_count+1, 'Unmute failed to restore speech'
+            await page.wait_for_function(ACTIVE)
             await page.evaluate("window.voiceInstances.at(-1).finish('stop listening')")
             await page.get_by_role('button', name='Start listening', exact=True).wait_for()
             assert not await page.evaluate(ACTIVE)
@@ -162,7 +184,7 @@ async def main(duplex=False):
             await lesson.get_by_text('2 / 4 points', exact=True).wait_for()
             assert [a['answer'] for a in answers] == ['Sunlight','Magnets']
             assert any('Correct.' in t for t in speeches) and any('Not quite.' in t for t in speeches)
-            assert len(commands) == 2, 'Quiz answers must not become desktop commands'
+            assert len(commands) == 5, 'Quiz answers must not become desktop commands'
             await page.screenshot(path='/tmp/apple-voice-teacher.png', full_page=True)
             await page.get_by_role('button', name='End lesson', exact=True).click()
             await page.get_by_role('button', name='End session', exact=True).click()
@@ -173,7 +195,7 @@ async def main(duplex=False):
             assert not await page.evaluate(ACTIVE)
             assert not errors, errors
             await browser.close()
-            print(f'PASS ({"full-duplex capability" if duplex else "safe turn-taking"}): shared processed track, PCM motion, actual spoken-text echo rejection, interruption, Stop releases microphone, voice lesson, permission errors.', flush=True)
+            print(f'PASS ({"full-duplex capability" if duplex else "safe turn-taking"}): shared processed track, PCM motion, actual spoken-text echo rejection, interruption, master mute/unmute preserves listening, Stop releases microphone, voice lesson, permission errors.', flush=True)
 
 asyncio.run(main())
 asyncio.run(main(duplex=True))

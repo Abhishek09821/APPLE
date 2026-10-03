@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-export function useFloatingAssistant({ theme, onClose, onError }) {
+export function useFloatingAssistant({ theme, palette, onClose, onError }) {
   const [floatingWindow, setFloatingWindow] = useState(null)
   const current = useRef(null),
     callbacks = useRef({ onClose, onError }),
@@ -63,8 +63,11 @@ export function useFloatingAssistant({ theme, onClose, onError }) {
     current.current?.close()
   }, [])
   useEffect(() => {
-    if (floatingWindow) floatingWindow.document.documentElement.dataset.theme = theme
-  }, [floatingWindow, theme])
+    if (floatingWindow) {
+      floatingWindow.document.documentElement.dataset.theme = theme
+      floatingWindow.document.documentElement.dataset.palette = palette
+    }
+  }, [floatingWindow, theme, palette])
   useEffect(
     () => () => {
       const popup = current.current

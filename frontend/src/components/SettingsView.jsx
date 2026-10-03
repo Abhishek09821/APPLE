@@ -12,6 +12,7 @@ import {
 import { api } from '../utils/api'
 import SavedContacts from './SavedContacts'
 import ProfileCard from './ProfileCard'
+import { colorThemes } from '../hooks/usePreferences'
 
 export default function SettingsView({
   status,
@@ -37,6 +38,7 @@ export default function SettingsView({
   autoTutor,
   setAutoTutor,
   preferences,
+  onSound,
   onFloat,
   floatingSupported,
   expressiveVoice,
@@ -79,6 +81,42 @@ export default function SettingsView({
           >
             <Moon size={22} />
             Dark
+          </button>
+        </div>
+        <div className="color-theme-heading">Color theme</div>
+        <div className="color-theme-grid" role="group" aria-label="Color theme">
+          {colorThemes.map(({ id, label, color }) => (
+            <button
+              key={id}
+              className="color-theme-choice"
+              aria-label={`${label} color theme`}
+              aria-pressed={preferences.palette === id}
+              onClick={() => preferences.setPalette(id)}
+            >
+              <span className="color-theme-swatch" style={{ '--swatch': color }}>
+                {preferences.palette === id && <Check size={14} />}
+              </span>
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="setting-row">
+          <div>
+            <strong>App sound</strong>
+            <p>
+              The speaker button mutes speech and clicks together. Your individual settings stay
+              saved.
+            </p>
+          </div>
+          <button
+            className={`toggle ${!preferences.muted ? 'on' : ''}`}
+            role="switch"
+            aria-checked={!preferences.muted}
+            aria-label="App sound"
+            data-audio-toggle
+            onClick={onSound}
+          >
+            <span />
           </button>
         </div>
         <div className="setting-row">
@@ -247,6 +285,7 @@ export default function SettingsView({
         </p>
         <button
           className="secondary-button"
+          disabled={preferences.muted}
           onClick={() =>
             speak(
               expressiveVoice

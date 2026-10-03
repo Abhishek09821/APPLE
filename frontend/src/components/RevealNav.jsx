@@ -8,6 +8,7 @@ import {
   VolumeX,
   Square,
   X,
+  Menu,
 } from 'lucide-react'
 import './reveal-nav.css'
 
@@ -32,21 +33,26 @@ export default function RevealNav({
   onFloat,
   connected,
   aiReady,
-  voice,
-  onVoice,
+  muted,
+  onSound,
   onStop,
 }) {
   const [open, setOpen] = useState(false)
+  const pinned = view === 'home'
+  const visible = pinned || open
   const region = useRef(null)
   const trigger = useRef(null)
   const panel = useRef(null)
+  const homeMenu = useRef(null)
+  const brand = useRef(null)
   const hideTimer = useRef(null)
   const panelId = useId()
   const items = [...navigation, { id: 'settings', label: 'Settings & connections' }]
   const cancelHide = useCallback(() => clearTimeout(hideTimer.current), [])
   const close = useCallback((restore = false) => {
     clearTimeout(hideTimer.current)
-    if (restore) trigger.current?.focus({ preventScroll: true })
+    if (restore)
+      (trigger.current || homeMenu.current || brand.current)?.focus({ preventScroll: true })
     setOpen(false)
   }, [])
   const reveal = () => {
@@ -55,7 +61,10 @@ export default function RevealNav({
   }
   const select = (id) => {
     onNavigate(id)
-    close(true)
+    close()
+    requestAnimationFrame(() =>
+      (id === 'home' ? brand.current : trigger.current)?.focus({ preventScroll: true }),
+    )
   }
   const status = connected ? (aiReady ? 'AI connected' : 'Basic tools ready') : 'Backend offline'
 
@@ -82,7 +91,7 @@ export default function RevealNav({
   return (
     <nav
       ref={region}
-      className={`global-nav${open ? ' nav-open' : ''}`}
+      className={`global-nav${visible ? ' nav-open' : ''}${pinned ? ' nav-pinned' : ''}${open ? ' nav-menu-open' : ''}`}
       aria-label="Main navigation"
       onPointerEnter={cancelHide}
       onPointerLeave={() => {
@@ -95,43 +104,46 @@ export default function RevealNav({
         if (!event.currentTarget.contains(event.relatedTarget)) close()
       }}
     >
-      <div
-        className="global-nav-edge"
-        onPointerEnter={(event) => {
-          if (event.pointerType === 'mouse') reveal()
-        }}
-      >
-        <button
-          ref={trigger}
-          className="global-nav-toggle"
-          aria-label="Show navigation"
-          title="Navigation · move to the top edge or press Enter"
-          aria-controls={panelId}
-          aria-expanded={open}
-          onClick={reveal}
-          onKeyDown={(event) => {
-            if (event.key === 'ArrowDown') {
-              event.preventDefault()
-              reveal()
-              requestAnimationFrame(() =>
-                panel.current?.querySelector('.global-nav-links button')?.focus(),
-              )
-            }
+      {!pinned && (
+        <div
+          className="global-nav-edge"
+          onPointerEnter={(event) => {
+            if (event.pointerType === 'mouse') reveal()
           }}
         >
-          <span />
-          <ChevronDown size={10} />
-        </button>
-      </div>
+          <button
+            ref={trigger}
+            className="global-nav-toggle"
+            aria-label="Show navigation"
+            title="Navigation · move to the top edge or press Enter"
+            aria-controls={panelId}
+            aria-expanded={open}
+            onClick={reveal}
+            onKeyDown={(event) => {
+              if (event.key === 'ArrowDown') {
+                event.preventDefault()
+                reveal()
+                requestAnimationFrame(() =>
+                  panel.current?.querySelector('.global-nav-links button')?.focus(),
+                )
+              }
+            }}
+          >
+            <span />
+            <ChevronDown size={10} />
+          </button>
+        </div>
+      )}
       <div
         ref={panel}
         id={panelId}
         className="global-nav-panel"
-        inert={open ? undefined : ''}
-        aria-hidden={!open}
+        inert={visible ? undefined : ''}
+        aria-hidden={!visible}
       >
         <div className="global-nav-inner">
           <a
+            ref={brand}
             href="#home"
             className="global-brand"
             aria-label="APPLE home"
@@ -150,7 +162,7 @@ export default function RevealNav({
             </svg>
             <span>APPLE</span>
           </a>
-          <div className="global-nav-links">
+          <div id={`${panelId}-links`} className="global-nav-links">
             {items.map(({ id, label }) => (
               <button
                 key={id}
@@ -172,12 +184,13 @@ export default function RevealNav({
               <i />
             </span>
             <button
-              aria-label={voice ? 'Turn spoken replies off' : 'Turn spoken replies on'}
-              title="Spoken replies"
-              aria-pressed={voice}
-              onClick={onVoice}
+              aria-label={muted ? 'Unmute all sounds' : 'Mute all sounds'}
+              title={muted ? 'Unmute all sounds' : 'Mute all sounds'}
+              aria-pressed={muted}
+              data-audio-toggle
+              onClick={onSound}
             >
-              {voice ? <Volume2 size={16} /> : <VolumeX size={16} />}
+              {muted ? <VolumeX size={16} /> : <Volume2 size={16} />}
             </button>
             <button
               aria-label="Stop all actions and speech"
@@ -203,13 +216,27 @@ export default function RevealNav({
             >
               <PictureInPicture2 size={17} />
             </button>
-            <button
-              className="nav-dismiss"
-              aria-label="Hide navigation"
-              onClick={() => close(true)}
-            >
-              <X size={17} />
-            </button>
+            {!pinned && (
+              <button
+                className="nav-dismiss"
+                aria-label="Hide navigation"
+                onClick={() => close(true)}
+              >
+                <X size={17} />
+              </button>
+            )}
+            {pinned && (
+              <button
+                ref={homeMenu}
+                className="nav-home-menu"
+                aria-label={open ? 'Close navigation menu' : 'Open navigation menu'}
+                aria-controls={`${panelId}-links`}
+                aria-expanded={open}
+                onClick={() => (open ? close() : reveal())}
+              >
+                {open ? <X size={18} /> : <Menu size={18} />}
+              </button>
+            )}
           </div>
         </div>
       </div>

@@ -47,14 +47,14 @@ const faqs = [
     'Clicks have an optional sound switch and volume in Settings. Scrolling is always silent. They pause during voice sessions to protect dictation. Light and dark themes save in this browser, and animations follow your system’s reduced-motion preference.',
   ],
 ]
-export function ProductFooter({ navigate, compact = false }) {
+function ProductFooter({ navigate }) {
   return (
-    <footer className={`product-footer${compact ? ' compact' : ''}`}>
+    <footer className="product-footer">
       <div>
         <button className="footer-brand" onClick={() => navigate('home')}>
           APPLE<span>By Abhishek Tiwari</span>
         </button>
-        {!compact && <p>Made for the small jobs between the big ones.</p>}
+        <p>Made for the small jobs between the big ones.</p>
       </div>
       <nav aria-label="Footer navigation">
         {[
@@ -75,15 +75,13 @@ export function ProductFooter({ navigate, compact = false }) {
           </a>
         ))}
       </nav>
-      {!compact && (
-        <div className="footer-contact">
-          <a href={`mailto:${EMAIL}`}>{EMAIL}</a>
-          <a href={LINKEDIN} target="_blank" rel="noopener noreferrer">
-            LinkedIn <ArrowUpRight size={12} />
-          </a>
-          <small>© {new Date().getFullYear()} Abhishek Tiwari · Independent software</small>
-        </div>
-      )}
+      <div className="footer-contact">
+        <a href={`mailto:${EMAIL}`}>{EMAIL}</a>
+        <a href={LINKEDIN} target="_blank" rel="noopener noreferrer">
+          LinkedIn <ArrowUpRight size={12} />
+        </a>
+        <small>© {new Date().getFullYear()} Abhishek Tiwari · Independent software</small>
+      </div>
     </footer>
   )
 }
@@ -224,7 +222,7 @@ export default function ProductPages({ view, navigate, onTour, name }) {
           </a>
         </section>
       )}
-      <ProductFooter navigate={navigate} />
+      {view === 'home' && <ProductFooter navigate={navigate} />}
     </div>
   )
 }

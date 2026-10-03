@@ -66,8 +66,12 @@ async def main():
   context.on('page',lambda tab:tab.on('pageerror',lambda e:errors.append(str(e))))
   page.on('pageerror',lambda e:errors.append(str(e)))
   async def open_nav():
-   await page.get_by_role('button',name='Show navigation',exact=True).focus()
-   await page.keyboard.press('ArrowDown')
+   menu=page.get_by_role('button',name='Open navigation menu',exact=True)
+   trigger=page.get_by_role('button',name='Show navigation',exact=True)
+   if await menu.is_visible(): await menu.click()
+   elif await trigger.is_visible():
+    await trigger.focus()
+    await page.keyboard.press('ArrowDown')
   async def navigate(label):
    await open_nav()
    await page.get_by_role('navigation',name='Main navigation').get_by_role('button',name=label,exact=True).click()
@@ -90,6 +94,22 @@ async def main():
   await navigate('Settings & connections')
   await page.get_by_role('switch',name='Interface sounds',exact=True).click()
   assert await page.evaluate("localStorage.getItem('apple-ui-sounds')") == 'true'
+  # Every color is distinct in both modes; color and appearance persist independently.
+  for appearance in ['Dark','Light']:
+   await page.get_by_role('button',name=appearance,exact=True).click()
+   accents=[]
+   for palette in ['Blue','Graphite','Violet','Rose','Amber','Mint']:
+    button=page.get_by_role('button',name=f'{palette} color theme',exact=True)
+    await button.click()
+    assert await button.get_attribute('aria-pressed')=='true'
+    assert await page.locator('html').get_attribute('data-palette')==palette.lower()
+    accents.append(await page.locator('html').evaluate('(el)=>getComputedStyle(el).getPropertyValue("--accent").trim()'))
+   assert len(set(accents))==6, accents
+  await page.get_by_role('button',name='Violet color theme',exact=True).click()
+  await page.reload()
+  await page.get_by_role('button',name='Violet color theme',exact=True).wait_for()
+  assert await page.locator('html').get_attribute('data-palette')=='violet'
+  assert await page.locator('html').get_attribute('data-theme')=='light'
   await navigate('FAQs')
   await page.locator('summary').filter(has_text='How does the floating companion work?').click()
   assert await page.locator('details[open]').count() == 1
@@ -99,6 +119,26 @@ async def main():
   await page.mouse.wheel(0,400)
   await page.wait_for_timeout(350)
   assert await page.evaluate('window.clickTones') == tones, 'Scrolling must always be silent'
+  # Master mute covers click sounds and survives reload, without altering sound preferences.
+  await open_nav()
+  tones=await page.evaluate('window.clickTones')
+  await page.get_by_role('button',name='Mute all sounds',exact=True).click()
+  assert await page.get_by_role('button',name='Unmute all sounds',exact=True).get_attribute('aria-pressed')=='true'
+  await page.locator('summary').first.click()
+  assert await page.evaluate('window.clickTones')==tones, 'Mute click or later controls produced sound'
+  assert await page.evaluate("localStorage.getItem('apple-ui-sounds')")=='true'
+  await page.reload()
+  await page.locator('summary').first.click()
+  assert await page.evaluate('window.clickTones')==0, 'Mute did not survive reload'
+  await navigate('Settings & connections')
+  assert await page.get_by_role('button',name='Try the voice',exact=True).is_disabled()
+  assert await page.get_by_role('switch',name='App sound',exact=True).get_attribute('aria-checked')=='false'
+  await open_nav()
+  await page.get_by_role('button',name='Unmute all sounds',exact=True).click()
+  assert await page.get_by_role('button',name='Try the voice',exact=True).is_enabled()
+  await navigate('FAQs')
+  await page.locator('summary').first.click()
+  assert await page.evaluate('window.clickTones')>0, 'Unmute failed to restore click sounds'
   await navigate('Contact & support')
   assert await page.locator('.contact-links a').first.get_attribute('href') == 'mailto:abhishek.tiwarii9821@gmail.com?subject=APPLE%20support'
   assert await page.locator('.contact-links a').last.get_attribute('href') == 'https://www.linkedin.com/in/abhishek-tiwari-3a3594300/'
@@ -150,6 +190,7 @@ async def main():
   assert await pip.locator('.vc-core').evaluate('(el)=>el.getBoundingClientRect().width') < 180
   assert await pip.evaluate('document.documentElement.scrollWidth <= innerWidth'), 'Companion overflow'
   assert await pip.locator('html').get_attribute('data-theme') == 'dark'
+  assert await pip.locator('html').get_attribute('data-palette') == 'violet'
   await pip.get_by_role('textbox',name='Message floating assistant').fill('A synthetic question')
   await pip.get_by_role('button',name='Send floating request').click()
   await page.get_by_text('Fixture received.',exact=True).wait_for()
@@ -195,6 +236,6 @@ async def main():
      await page.screenshot(path=f'/tmp/apple-{view}-mobile-light.png')
   assert not errors,errors
   await browser.close()
-  print('PASS: landing, links, FAQ, privacy, themes, sounds, selected/all history deletion, responsive pages, real PiP, shared voice and microphone cleanup.')
+  print('PASS: landing, links, FAQ, privacy, six color themes in both modes, persistent master mute, sounds, selected/all history deletion, responsive pages, real PiP, shared voice and microphone cleanup.')
 
 if __name__ == '__main__': asyncio.run(main())

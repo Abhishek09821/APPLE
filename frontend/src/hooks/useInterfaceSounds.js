@@ -35,6 +35,7 @@ export function useInterfaceSounds({ enabled, volume, muted, extraDocument }) {
     const click = (event) => {
       if (
         event.isTrusted &&
+        !event.target.closest('[data-audio-toggle]') &&
         event.target.closest(
           'button:not(:disabled), a, summary, input[type=checkbox], input[type=radio]',
         )

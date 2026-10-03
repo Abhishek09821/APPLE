@@ -11,7 +11,7 @@ import WelcomeFlow from './components/WelcomeFlow'
 import './tutor.css'
 import AmbientField from './components/AmbientField'
 import RevealNav from './components/RevealNav'
-import ProductPages, { ProductFooter, publicViews } from './components/ProductPages'
+import ProductPages, { publicViews } from './components/ProductPages'
 import FloatingAssistant from './components/FloatingAssistant'
 import { useFloatingAssistant } from './hooks/useFloatingAssistant'
 import { usePreferences } from './hooks/usePreferences'
@@ -140,8 +140,10 @@ export default function App() {
   const controller = useRef(null)
   const speechQueue = useRef(Promise.resolve())
   const speechEpoch = useRef(0)
-  const audioEnabled = useRef(voice)
-  audioEnabled.current = voice
+  const audioMuted = useRef(preferences.muted)
+  audioMuted.current = preferences.muted
+  const audioEnabled = useRef(voice && !preferences.muted)
+  audioEnabled.current = voice && !preferences.muted
   const inputRef = useRef(null)
   const bottom = useRef(null)
   const fileInput = useRef(null)
@@ -187,6 +189,7 @@ export default function App() {
   const listening = voiceSession.listening
   const floating = useFloatingAssistant({
     theme: preferences.theme,
+    palette: preferences.palette,
     onError: setError,
     onClose: () => {
       voiceSession.stop()
@@ -197,7 +200,7 @@ export default function App() {
     extraDocument: floating.floatingWindow?.document,
     enabled: preferences.sounds,
     volume: preferences.soundVolume,
-    muted: voiceSession.enabled || speaking || speechPending,
+    muted: preferences.muted || voiceSession.enabled || speaking || speechPending,
   })
   function navigate(id) {
     if (id !== 'assistant') tutor.stop()
@@ -336,14 +339,14 @@ export default function App() {
     setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, ...values } : m)))
   }
   function speak(text) {
-    if (!text?.trim()) return Promise.resolve()
+    if (audioMuted.current || !text?.trim()) return Promise.resolve()
     const epoch = speechEpoch.current
     audio.prepare().catch((e) => setError(e.message))
     setSpeechPending(true)
     const task = speechQueue.current
       .catch(() => {})
       .then(async () => {
-        if (epoch !== speechEpoch.current) return
+        if (audioMuted.current || epoch !== speechEpoch.current) return
         let ended, playback
         try {
           await audio.play(text, (reference) => {
@@ -558,6 +561,15 @@ export default function App() {
       tutor.stop()
     }
   }
+  function toggleSound() {
+    const muted = !audioMuted.current
+    // Gate queued replies immediately, before React renders the new icon.
+    audioMuted.current = muted
+    audioEnabled.current = voice && !muted
+    preferences.setMuted(muted)
+    if (muted) cancelSpeech()
+    setNotice(muted ? 'All app sounds muted.' : 'Sound on. Your saved audio settings are restored.')
+  }
   async function doWork(fn) {
     setWorking(true)
     setError('')
@@ -601,7 +613,7 @@ export default function App() {
   return (
     <MotionConfig reducedMotion="user">
       <div
-        className={`app-shell console-shell ${isPublic ? 'public-shell' : ''} ${view === 'assistant' ? 'console-active' : ''}`}
+        className={`app-shell console-shell ${isPublic ? 'public-shell' : ''} ${view === 'home' ? 'home-shell' : ''} ${view === 'assistant' ? 'console-active' : ''}`}
       >
         <AmbientField audioLevel={audio.level} />
         {showWelcome && (
@@ -642,8 +654,8 @@ export default function App() {
           onFloat={openFloating}
           connected={connected}
           aiReady={status?.ai?.ready}
-          voice={voice}
-          onVoice={toggleVoice}
+          muted={preferences.muted}
+          onSound={toggleSound}
           onStop={stop}
         />
 
@@ -1009,6 +1021,7 @@ export default function App() {
                   onSaveProfile={saveProfile}
                   onTour={openTour}
                   preferences={preferences}
+                  onSound={toggleSound}
                   onFloat={openFloating}
                   floatingSupported={floating.supported}
                   expressiveVoice={expressiveVoice}
@@ -1039,7 +1052,6 @@ export default function App() {
               )}
             </div>
           </div>
-          {!isPublic && <ProductFooter compact navigate={navigate} />}
           <input
             ref={fileInput}
             type="file"

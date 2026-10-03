@@ -32,12 +32,17 @@ async def main():
    errors.append('Unexpected route '+path); return await route.fulfill(status=404,json={'detail':'Unexpected fixture'})
   await page.route('**/api/**',routes)
   async def open_nav():
-   await page.get_by_role('button',name='Show navigation',exact=True).focus()
-   await page.keyboard.press('ArrowDown')
+   menu=page.get_by_role('button',name='Open navigation menu',exact=True)
+   trigger=page.get_by_role('button',name='Show navigation',exact=True)
+   if await menu.is_visible(): await menu.click()
+   elif await trigger.is_visible():
+    await trigger.focus()
+    await page.keyboard.press('ArrowDown')
   async def navigate(label):
    await open_nav()
    await page.get_by_role('navigation',name='Main navigation').get_by_role('button',name=label,exact=True).click()
-   assert await page.locator('.global-nav-panel').get_attribute('aria-hidden')=='true', 'Navigation must retract after selection'
+   assert await page.locator('.global-nav-panel').get_attribute('aria-hidden')==('false' if label=='About APPLE' else 'true'), 'Home stays visible; other pages retract'
+   assert await page.locator('footer').count()==(1 if label=='About APPLE' else 0), 'Footer belongs only on Home'
    assert await page.locator('.topbar').count()==0, 'Duplicate header returned'
   await page.goto('http://127.0.0.1:8000')
   welcome=page.get_by_role('dialog')
@@ -63,6 +68,12 @@ async def main():
   await page.mouse.move(100,1)
   await page.wait_for_timeout(350)
   await page.screenshot(path=str(SHOTS/'home.png'))
+  await page.mouse.move(600,650)
+  await page.keyboard.press('Escape')
+  await page.wait_for_timeout(450)
+  assert await page.locator('.global-nav-panel').get_attribute('aria-hidden')=='false', 'Home navbar must stay visible'
+  spacing=await page.evaluate('''()=>{const boxes=[document.querySelector('.global-brand'),...document.querySelectorAll('.global-nav-links button')].map(el=>el.getBoundingClientRect()); const gaps=boxes.slice(1).map((b,i)=>b.left-boxes[i].right); return Math.max(...gaps)-Math.min(...gaps)}''')
+  assert spacing<2, ('Uneven desktop navigation gaps',spacing)
   await navigate('Settings & connections')
   # The panel stays hidden after selection, then returns from any point on the top edge.
   await page.mouse.move(300,250)
@@ -83,6 +94,7 @@ async def main():
   await page.get_by_role('button',name='Save name',exact=True).click()
   await page.get_by_text('Your name is saved. APPLE will use it in future conversations.',exact=True).wait_for()
   assert profile['name']=='Riya'
+  await page.get_by_role('group',name='Color theme',exact=True).locator('..').screenshot(path=str(SHOTS/'themes.png'))
   await page.get_by_role('button',name='Replay welcome tour',exact=True).click()
   await welcome.get_by_role('heading',name='Hi Riya. Let’s save you some typing.').wait_for()
   await welcome.get_by_role('button',name='Next: your library').click()
@@ -139,7 +151,7 @@ async def main():
   touch_page=await touch.new_page()
   await touch_page.route('**/api/**',routes)
   await touch_page.goto('http://127.0.0.1:8000')
-  await touch_page.get_by_role('button',name='Show navigation',exact=True).tap()
+  await touch_page.get_by_role('button',name='Open navigation menu',exact=True).tap()
   await touch_page.get_by_role('button',name='Knowledge library',exact=True).tap()
   await touch_page.get_by_text('Biology revision.txt',exact=True).wait_for()
   assert await touch_page.locator('.global-nav-panel').get_attribute('aria-hidden')=='true'
