@@ -27,39 +27,54 @@ SYNTHESIS = set()
 VOICE_REGISTRY = {
     'hero': {
         'label': 'Hero',
-        'description': 'Young, energetic, witty Hindi/English superhero-style voice',
+        'description': 'Young, energetic, witty English superhero-style voice',
         'voices': {
-            'hi': 'Lekha',     # Native Hindi – hi_IN
             'en': 'Rishi',     # Indian English – en_IN (energetic male)
         },
         'base_pitch': {
-            'hi': 195,
             'en': 145,
         },
+        'languages': ['en'],
+        'engine': 'macos',
     },
     'jarvis': {
         'label': 'Jarvis',
-        'description': 'Deep, calm, intelligent English/Hinglish voice',
+        'description': 'Deep, calm, intelligent English voice',
         'voices': {
-            'hi': 'Lekha',     # Native Hindi – hi_IN
             'en': 'Aman',      # Indian English – en_IN (deeper calm male)
         },
         'base_pitch': {
-            'hi': 165,
             'en': 105,
         },
+        'languages': ['en'],
+        'engine': 'macos',
     },
     'natural': {
         'label': 'Natural',
-        'description': 'Friendly, natural Indian Hindi/English voice',
+        'description': 'Friendly, natural Indian English voice',
         'voices': {
-            'hi': 'Lekha',     # Native Hindi – hi_IN
             'en': 'Tara',      # Indian English – en_IN (natural female)
         },
         'base_pitch': {
-            'hi': 180,
             'en': 180,
         },
+        'languages': ['en'],
+        'engine': 'macos',
+    },
+    'my_voice': {
+        'label': 'My Voice',
+        'description': 'Personalized cloned voice using local IndicF5 for natural Hindi, English, and Hinglish',
+        'voices': {
+            'hi': 'my_voice',
+            'en': 'my_voice',
+            'hinglish': 'my_voice',
+        },
+        'base_pitch': {
+            'en': 150,
+            'hi': 150,
+        },
+        'languages': ['hi', 'en', 'hinglish'],
+        'engine': 'indicf5',
     },
 }
 
@@ -110,13 +125,23 @@ def detect_language(text):
 
 
 def get_voice_for_persona(persona, text):
-    """Pick the macOS voice name for a persona given the text content.
+    """Pick the voice identifier for a persona given the text content.
 
     Falls back to 'natural' persona if persona is unknown.
+    Returns None if an English-only persona is asked to speak Hindi/Hinglish.
     """
     entry = VOICE_REGISTRY.get(persona, VOICE_REGISTRY['natural'])
+    if entry.get('engine') == 'indicf5':
+        return persona
     lang = detect_language(text)
-    return entry['voices'].get(lang, entry['voices']['en'])
+    if lang == 'hi':
+        # Hero, Jarvis, Natural are English-only voices and cannot be used for Hindi or Hinglish
+        return None
+    voices = entry.get('voices')
+    if isinstance(voices, dict):
+        v = voices.get('en')
+        return str(v) if v else None
+    return None
 
 
 def _compute_pitch_hz(persona, lang, pitch_multiplier):
@@ -126,8 +151,8 @@ def _compute_pitch_hz(persona, lang, pitch_multiplier):
     Scales the persona- and language-specific base frequency.
     """
     entry = VOICE_REGISTRY.get(persona, VOICE_REGISTRY['natural'])
-    base_dict = entry.get('base_pitch', {'hi': 180, 'en': 140})
-    base = base_dict.get(lang, 150)
+    base_dict = entry.get('base_pitch')
+    base = base_dict.get(lang, 150) if isinstance(base_dict, dict) else 150
     hz = int(base * pitch_multiplier)
     return max(50, min(320, hz))
 
@@ -176,12 +201,12 @@ def spoken_result(reply, results):
 
 
 async def render_audio(text, rate, persona='natural', pitch=1.0, volume=1.0):
-    """Render text to WAV audio using macOS `say` with the selected persona.
+    """Render text to WAV audio using either IndicF5 or macOS `say`.
 
     Args:
         text: The text to speak.
         rate: Words per minute (100–250).
-        persona: Voice persona key ('hero', 'jarvis', 'natural').
+        persona: Voice persona key ('hero', 'jarvis', 'natural', 'my_voice').
         pitch: Pitch multiplier (0.5–2.0).
         volume: Output volume (0.0–1.0, scaled in 16-bit PCM).
     """
@@ -189,9 +214,25 @@ async def render_audio(text, rate, persona='natural', pitch=1.0, volume=1.0):
     if not clean:
         return b'', clean
     entry = VOICE_REGISTRY.get(persona, VOICE_REGISTRY['natural'])
+
+    # Handle local IndicF5 cloned voices (My Voice)
+    if entry.get('engine') == 'indicf5' or persona == 'my_voice':
+        from voice_clone import render_indicf5_audio
+        return await render_indicf5_audio(clean, voice_id=persona, rate=rate, pitch=pitch, volume=volume)
+
+    # Hero, Jarvis, and Natural are strictly English-only voices
+    # Do not use Hero/Jarvis/Natural for Hindi or Hinglish
     lang = detect_language(clean)
-    voice_name = entry['voices'].get(lang, entry['voices']['en'])
-    pitch_hz = _compute_pitch_hz(persona, lang, pitch)
+    if lang == 'hi':
+        return b'', clean
+
+    voices = entry.get('voices')
+    raw_voice = voices.get('en') if isinstance(voices, dict) else None
+    if not isinstance(raw_voice, str) or not raw_voice:
+        return b'', clean
+    voice_name = raw_voice
+
+    pitch_hz = _compute_pitch_hz(persona, 'en', pitch)
     key = (clean, rate, persona, pitch_hz, voice_name, round(volume, 2))
     if key in CACHE:
         CACHE.move_to_end(key)
@@ -203,7 +244,7 @@ async def render_audio(text, rate, persona='natural', pitch=1.0, volume=1.0):
         text_with_pitch = f'[[pbas {pitch_hz}]] {clean}' if pitch_hz else clean
         source.write_text(text_with_pitch)
 
-        cmd = [
+        process = await asyncio.create_subprocess_exec(
             'say',
             '-v', voice_name,
             '-r', str(rate),
@@ -211,10 +252,9 @@ async def render_audio(text, rate, persona='natural', pitch=1.0, volume=1.0):
             '-o', str(target),
             '--file-format=WAVE',
             '--data-format=LEI16@22050',
-        ]
-        process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE)
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.PIPE,
+        )
         SYNTHESIS.add(process)
         try:
             _, error = await asyncio.wait_for(process.communicate(), 25)
@@ -264,6 +304,8 @@ def list_voices():
             'label': entry['label'],
             'description': entry['description'],
             'voices': entry['voices'],
+            'languages': entry.get('languages', ['en']),
+            'engine': entry.get('engine', 'macos'),
         }
         for key, entry in VOICE_REGISTRY.items()
     ]

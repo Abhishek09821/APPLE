@@ -6,40 +6,47 @@ const VOICE_PERSONAS = [
     id: 'hero',
     label: 'Hero',
     badge: 'Energetic & Witty',
-    accent: 'Indian English / Native Hindi',
-    description: 'Young, energetic, witty superhero-style voice with vibrant Indian intonation and cadence.',
+    accent: 'English',
+    description: 'Young, energetic, witty English superhero-style voice with vibrant cadence.',
     icon: Zap,
     color: '#e8a048',
     gradient: 'linear-gradient(135deg, rgba(232, 160, 72, 0.12), rgba(30, 25, 20, 0.8))',
-    sampleHi: 'अरे भाई, tension मत लो! Main hoon na, tumhara Hero!',
     sampleEn: 'Hey! No worries, I got this. Your Hero is here to help!',
-    sampleHinglish: 'Arre yaar, chill karo! Main handle kar lunga sab kuch!',
   },
   {
     id: 'jarvis',
     label: 'Jarvis',
     badge: 'Calm & Intelligent',
-    accent: 'Indian English / Native Hindi',
-    description: 'Deep, calm, intelligent voice crafted for precise assistance, clear reasoning, and composure.',
+    accent: 'English',
+    description: 'Deep, calm, intelligent English voice crafted for precise assistance.',
     icon: Bot,
     color: '#6ea8e8',
     gradient: 'linear-gradient(135deg, rgba(110, 168, 232, 0.12), rgba(20, 28, 38, 0.8))',
-    sampleHi: 'सर, आपकी रिक्वेस्ट प्रोसेस हो रही है। कृपया प्रतीक्षा करें।',
     sampleEn: 'Sir, I have processed your request. Everything is in order.',
-    sampleHinglish: 'Sir, aapki request process ho gayi hai. Sab kuch ready hai.',
   },
   {
     id: 'natural',
     label: 'Natural',
     badge: 'Warm & Friendly',
-    accent: 'Indian English / Native Hindi',
-    description: 'Friendly, natural Indian Hindi and English voice with authentic pronunciation and smooth flow.',
+    accent: 'English',
+    description: 'Friendly, natural English voice with clear articulation and smooth flow.',
     icon: User,
     color: '#8ed8bb',
     gradient: 'linear-gradient(135deg, rgba(142, 216, 187, 0.12), rgba(20, 32, 28, 0.8))',
-    sampleHi: 'नमस्ते! मैं आपकी मदद के लिए हमेशा तैयार हूँ।',
     sampleEn: 'Hello! I am always ready to help you with anything.',
-    sampleHinglish: 'Namaste! Main aapki help ke liye hamesha ready hoon.',
+  },
+  {
+    id: 'my_voice',
+    label: 'My Voice',
+    badge: 'Voice Clone • IndicF5',
+    accent: 'Hindi / English / Hinglish',
+    description: 'Personalized cloned voice powered by local IndicF5 with natural Hindi, English, and Hinglish pronunciation.',
+    icon: Mic2,
+    color: '#a78bfa',
+    gradient: 'linear-gradient(135deg, rgba(167, 139, 250, 0.16), rgba(32, 22, 45, 0.85))',
+    sampleHi: 'नमस्ते! मैं आपका पर्सनल AI असिस्टेंट हूँ। आज हम क्या करेंगे?',
+    sampleEn: 'Hello Abhishek! Your personal voice clone is ready. How can I help you today?',
+    sampleHinglish: 'Namaste! Main aapka AI assistant hoon. Aaj ka task start karein?',
   },
 ]
 
@@ -130,59 +137,65 @@ export default function VoiceSpeechSettings({
               <div className="voice-preview-section">
                 <span className="voice-preview-label">Preview Voice:</span>
                 <div className="voice-preview-buttons">
-                  <button
-                    type="button"
-                    className={`voice-preview-btn ${isHiPlaying ? 'playing' : ''}`}
-                    disabled={muted || (!!playingKey && !isHiPlaying)}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      previewVoice(persona, 'hi', persona.sampleHi)
-                    }}
-                    title="Preview Native Hindi pronunciation"
-                  >
-                    {isHiPlaying ? (
-                      <AudioLines size={12} className="pulse-icon" />
-                    ) : (
-                      <Play size={11} />
-                    )}
-                    <span>हिन्दी</span>
-                  </button>
+                  {persona.sampleHi && (
+                    <button
+                      type="button"
+                      className={`voice-preview-btn ${isHiPlaying ? 'playing' : ''}`}
+                      disabled={muted || (!!playingKey && !isHiPlaying)}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        previewVoice(persona, 'hi', persona.sampleHi)
+                      }}
+                      title="Preview Hindi pronunciation"
+                    >
+                      {isHiPlaying ? (
+                        <AudioLines size={12} className="pulse-icon" />
+                      ) : (
+                        <Play size={11} />
+                      )}
+                      <span>हिन्दी</span>
+                    </button>
+                  )}
 
-                  <button
-                    type="button"
-                    className={`voice-preview-btn ${isEnPlaying ? 'playing' : ''}`}
-                    disabled={muted || (!!playingKey && !isEnPlaying)}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      previewVoice(persona, 'en', persona.sampleEn)
-                    }}
-                    title="Preview Indian English pronunciation"
-                  >
-                    {isEnPlaying ? (
-                      <AudioLines size={12} className="pulse-icon" />
-                    ) : (
-                      <Play size={11} />
-                    )}
-                    <span>English</span>
-                  </button>
+                  {persona.sampleEn && (
+                    <button
+                      type="button"
+                      className={`voice-preview-btn ${isEnPlaying ? 'playing' : ''}`}
+                      disabled={muted || (!!playingKey && !isEnPlaying)}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        previewVoice(persona, 'en', persona.sampleEn)
+                      }}
+                      title="Preview English pronunciation"
+                    >
+                      {isEnPlaying ? (
+                        <AudioLines size={12} className="pulse-icon" />
+                      ) : (
+                        <Play size={11} />
+                      )}
+                      <span>English</span>
+                    </button>
+                  )}
 
-                  <button
-                    type="button"
-                    className={`voice-preview-btn ${isHinglishPlaying ? 'playing' : ''}`}
-                    disabled={muted || (!!playingKey && !isHinglishPlaying)}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      previewVoice(persona, 'hinglish', persona.sampleHinglish)
-                    }}
-                    title="Preview Hinglish code-switching in the same sentence"
-                  >
-                    {isHinglishPlaying ? (
-                      <AudioLines size={12} className="pulse-icon" />
-                    ) : (
-                      <Play size={11} />
-                    )}
-                    <span>Hinglish</span>
-                  </button>
+                  {persona.sampleHinglish && (
+                    <button
+                      type="button"
+                      className={`voice-preview-btn ${isHinglishPlaying ? 'playing' : ''}`}
+                      disabled={muted || (!!playingKey && !isHinglishPlaying)}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        previewVoice(persona, 'hinglish', persona.sampleHinglish)
+                      }}
+                      title="Preview Hinglish code-switching in the same sentence"
+                    >
+                      {isHinglishPlaying ? (
+                        <AudioLines size={12} className="pulse-icon" />
+                      ) : (
+                        <Play size={11} />
+                      )}
+                      <span>Hinglish</span>
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

@@ -372,7 +372,13 @@ export default function App() {
               clearTimeout(speechTailTimer.current)
               setSpeechTail(true)
             },
-            options,
+            {
+              persona: voicePersona,
+              speechRate,
+              speechPitch,
+              speechVolume,
+              ...options,
+            },
           )
         } finally {
           ended?.()

@@ -64,22 +64,28 @@ class SpeechTests(unittest.TestCase):
 
     # ─── Persona Voice Selection Tests ───
     def test_hero_persona_voices(self):
-        # Native Hindi for Hindi text
-        self.assertEqual(get_voice_for_persona('hero', 'नमस्ते! Main tumhara Hero hoon!'), 'Lekha')
+        # Hero is strictly English-only
+        self.assertIsNone(get_voice_for_persona('hero', 'नमस्ते! Main tumhara Hero hoon!'))
         # Energetic Indian English for English
         self.assertEqual(get_voice_for_persona('hero', 'Hey! No worries, I got this. Your Hero is here!'), 'Rishi')
 
     def test_jarvis_persona_voices(self):
-        # Native Hindi for Hindi
-        self.assertEqual(get_voice_for_persona('jarvis', 'सर, आपकी फाइल तैयार है।'), 'Lekha')
+        # Jarvis is strictly English-only
+        self.assertIsNone(get_voice_for_persona('jarvis', 'सर, आपकी फाइल तैयार है।'))
         # Deep calm Indian English for English
         self.assertEqual(get_voice_for_persona('jarvis', 'Sir, I have processed your request. Everything is in order.'), 'Aman')
 
     def test_natural_persona_voices(self):
-        # Native Hindi for Hindi
-        self.assertEqual(get_voice_for_persona('natural', 'नमस्ते! मैं आपकी मदद करूँगी।'), 'Lekha')
+        # Natural is strictly English-only
+        self.assertIsNone(get_voice_for_persona('natural', 'नमस्ते! मैं आपकी मदद करूँगी।'))
         # Natural Indian English for English
         self.assertEqual(get_voice_for_persona('natural', 'Hello! I am always ready to help you with anything.'), 'Tara')
+
+    def test_my_voice_persona(self):
+        # My Voice supports Hindi, Hinglish, and English via IndicF5
+        self.assertEqual(get_voice_for_persona('my_voice', 'नमस्ते! मैं आपका पर्सनल AI असिस्टेंट हूँ।'), 'my_voice')
+        self.assertEqual(get_voice_for_persona('my_voice', 'Hello Abhishek!'), 'my_voice')
+        self.assertEqual(get_voice_for_persona('my_voice', 'Namaste! Main aapka AI assistant hoon.'), 'my_voice')
 
     def test_unknown_persona_fallback(self):
         # Unknown persona falls back to natural
@@ -92,12 +98,17 @@ class SpeechTests(unittest.TestCase):
         self.assertIn('hero', persona_ids)
         self.assertIn('jarvis', persona_ids)
         self.assertIn('natural', persona_ids)
+        self.assertIn('my_voice', persona_ids)
         for v in voices:
             self.assertIn('label', v)
             self.assertIn('description', v)
             self.assertIn('voices', v)
-            self.assertIn('hi', v['voices'])
-            self.assertIn('en', v['voices'])
+            if v['id'] in ('hero', 'jarvis', 'natural'):
+                self.assertEqual(v['languages'], ['en'])
+            elif v['id'] == 'my_voice':
+                self.assertIn('hi', v['languages'])
+                self.assertIn('en', v['languages'])
+                self.assertIn('hinglish', v['languages'])
 
     # ─── Pitch Calculation Tests ───
     def test_compute_pitch_hz(self):

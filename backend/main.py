@@ -2,6 +2,7 @@ import asyncio
 import json
 import platform
 import secrets
+import tempfile
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -393,7 +394,7 @@ SPEECH = None
 class Speech(BaseModel):
     text: str = Field(min_length=1, max_length=12000)
     wait: bool = False
-    persona: str | None = Field(default=None, pattern=r'^(hero|jarvis|natural)$')
+    persona: str | None = Field(default=None, pattern=r'^(hero|jarvis|natural|my_voice)$')
     speech_rate: int | None = Field(default=None, ge=100, le=250)
     speech_pitch: float | None = Field(default=None, ge=0.5, le=2.0)
     speech_volume: float | None = Field(default=None, ge=0.0, le=1.0)
@@ -448,9 +449,26 @@ async def speak(value: Speech):
     cfg = settings()
     persona = value.persona or cfg.voice_persona
     rate = value.speech_rate or cfg.speech_rate
-    from speech import get_voice_for_persona
-    voice_name = get_voice_for_persona(persona, clean)
-    SPEECH = await asyncio.create_subprocess_exec('say', '-v', voice_name, '-r', str(rate), '--', clean)
+    pitch = value.speech_pitch if value.speech_pitch is not None else cfg.speech_pitch
+    volume = value.speech_volume if value.speech_volume is not None else cfg.speech_volume
+
+    if persona == 'my_voice':
+        from voice_clone import render_indicf5_audio
+        data, _ = await render_indicf5_audio(clean, voice_id=persona, rate=rate, pitch=pitch, volume=volume)
+        if not data:
+            return {'speaking': False, 'completed': True}
+        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as f:
+            f.write(data)
+            tmp_path = f.name
+        SPEECH = await asyncio.create_subprocess_exec('afplay', tmp_path)
+    else:
+        from speech import get_voice_for_persona
+        voice_name = get_voice_for_persona(persona, clean)
+        if not voice_name:
+            # Hero, Jarvis, Natural are English-only voices and cannot be used for Hindi/Hinglish
+            return {'speaking': False, 'completed': True}
+        SPEECH = await asyncio.create_subprocess_exec('say', '-v', voice_name, '-r', str(rate), '--', clean)
+
     if value.wait:
         process = SPEECH
         code = await process.wait()
