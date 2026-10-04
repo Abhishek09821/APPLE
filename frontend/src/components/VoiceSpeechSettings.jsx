@@ -108,11 +108,27 @@ export default function VoiceSpeechSettings({
               aria-checked={selected}
               tabIndex={0}
               style={{ '--persona-color': persona.color, '--persona-bg': persona.gradient }}
-              onClick={() => setVoicePersona(persona.id)}
+              onClick={() => {
+                setVoicePersona(persona.id)
+                if (!playingKey && !muted) {
+                  if (persona.id === 'my_voice') {
+                    previewVoice(persona, 'hi', persona.sampleHi)
+                  } else {
+                    previewVoice(persona, 'en', persona.sampleEn)
+                  }
+                }
+              }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault()
                   setVoicePersona(persona.id)
+                  if (!playingKey && !muted) {
+                    if (persona.id === 'my_voice') {
+                      previewVoice(persona, 'hi', persona.sampleHi)
+                    } else {
+                      previewVoice(persona, 'en', persona.sampleEn)
+                    }
+                  }
                 }
               }}
             >

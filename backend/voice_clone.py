@@ -44,6 +44,7 @@ CACHE_LOCK = threading.Lock()
 _INDICF5_MODEL = None
 _INDICF5_VOCODER = None
 _MODEL_LOCK = threading.Lock()
+_INFERENCE_LOCK = threading.Lock()
 _DEVICE = None
 
 
@@ -231,48 +232,38 @@ def get_indicf5_vocoder():
 
 
 def _synthesize_sync(text, voice_id=DEFAULT_VOICE_ID, rate=175, pitch=1.0, volume=1.0):
-    """Synchronous inference worker executed in a worker thread."""
-    from f5_tts.infer.utils_infer import infer_process
-    from speech import detect_language
+    """Synchronous inference worker executed in a worker thread.
 
-    # Prepare reference audio and clip
-    info = preprocess_reference_voice(voice_id)
-    lang = detect_language(text)
+    Thread-safe serialization via _INFERENCE_LOCK prevents Apple Silicon
+    MTLCommandBuffer concurrent encoder collisions.
+    """
+    with _INFERENCE_LOCK:
+        from f5_tts.infer.utils_infer import infer_process
+        from speech import detect_language
 
-    # Use pure English clip when speaking pure English, otherwise use Hindi/Hinglish clip
-    if lang == 'en' and info.get('clip_en_wav') and info['clip_en_wav'].exists():
-        ref_file = str(info['clip_en_wav'])
-        ref_text = info['clip_en_txt']
-    else:
-        ref_file = str(info['clip_wav'])
-        ref_text = info['clip_txt']
+        # Prepare reference audio and clip
+        info = preprocess_reference_voice(voice_id)
+        lang = detect_language(text)
 
-    model = get_indicf5_model()
-    vocoder = get_indicf5_vocoder()
-    device = next(model.parameters()).device
+        # Use pure English clip when speaking pure English, otherwise use Hindi/Hinglish clip
+        if lang == 'en' and info.get('clip_en_wav') and info['clip_en_wav'].exists():
+            ref_file = str(info['clip_en_wav'])
+            ref_text = info['clip_en_txt']
+        else:
+            ref_file = str(info['clip_wav'])
+            ref_text = info['clip_txt']
 
-    # Calculate speed factor based on speech rate (baseline 175 wpm = 1.0)
-    speed = max(0.7, min(1.5, rate / 175.0))
+        model = get_indicf5_model()
+        vocoder = get_indicf5_vocoder()
+        device = next(model.parameters()).device
 
-    try:
-        audio, sr, _ = infer_process(
-            ref_file,
-            ref_text,
-            text,
-            model,
-            vocoder,
-            mel_spec_type='vocos',
-            speed=speed,
-            device=device,
-            nfe_step=16,
-            show_info=lambda *a: None,
-        )
-    except Exception:
-        # Fall back to CPU execution if device ran out of memory or encountered MPS issue
-        if device.type != 'cpu':
-            cpu_device = torch.device('cpu')
-            model.to(cpu_device)
-            vocoder.to(cpu_device)
+        # Calculate speed factor based on speech rate (baseline 175 wpm = 1.0)
+        speed = max(0.7, min(1.5, rate / 175.0))
+
+        if device.type == 'mps':
+            torch.mps.synchronize()
+
+        try:
             audio, sr, _ = infer_process(
                 ref_file,
                 ref_text,
@@ -281,15 +272,38 @@ def _synthesize_sync(text, voice_id=DEFAULT_VOICE_ID, rate=175, pitch=1.0, volum
                 vocoder,
                 mel_spec_type='vocos',
                 speed=speed,
-                device=cpu_device,
+                device=device,
                 nfe_step=16,
                 show_info=lambda *a: None,
             )
-            # Restore device
-            model.to(device)
-            vocoder.to(device)
-        else:
-            raise
+            if device.type == 'mps':
+                torch.mps.synchronize()
+        except Exception:
+            # Fall back to CPU execution if device ran out of memory or encountered MPS issue
+            if device.type != 'cpu':
+                cpu_device = torch.device('cpu')
+                model.to(cpu_device)
+                vocoder.to(cpu_device)
+                audio, sr, _ = infer_process(
+                    ref_file,
+                    ref_text,
+                    text,
+                    model,
+                    vocoder,
+                    mel_spec_type='vocos',
+                    speed=speed,
+                    device=cpu_device,
+                    nfe_step=16,
+                    show_info=lambda *a: None,
+                )
+                # Restore device
+                model.to(device)
+                vocoder.to(device)
+            else:
+                raise
+        finally:
+            if device.type == 'mps':
+                torch.mps.empty_cache()
 
     audio_arr = np.array(audio, dtype=np.float32)
 
@@ -327,3 +341,13 @@ async def render_indicf5_audio(text, voice_id=DEFAULT_VOICE_ID, rate=175, pitch=
             CACHE.popitem(last=False)
 
     return wav_bytes, text
+
+
+def warm_up_indicf5():
+    """Pre-warm IndicF5 model in the background on startup."""
+    try:
+        preprocess_reference_voice(DEFAULT_VOICE_ID)
+        get_indicf5_model()
+        get_indicf5_vocoder()
+    except Exception:
+        pass

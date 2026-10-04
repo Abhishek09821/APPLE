@@ -35,6 +35,10 @@ ALLOWED_ORIGINS = {'http://localhost:5173', 'http://127.0.0.1:5173', 'http://loc
 
 @asynccontextmanager
 async def lifespan(app):
+    from voice_clone import warm_up_indicf5
+    warm_task = asyncio.create_task(asyncio.to_thread(warm_up_indicf5))
+    ACTIVE.add(warm_task)
+    warm_task.add_done_callback(ACTIVE.discard)
     yield
     for task in list(ACTIVE):
         task.cancel()
