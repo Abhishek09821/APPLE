@@ -12,6 +12,7 @@ import {
 import { api } from '../utils/api'
 import SavedContacts from './SavedContacts'
 import ProfileCard from './ProfileCard'
+import VoiceSpeechSettings from './VoiceSpeechSettings'
 import { colorThemes } from '../hooks/usePreferences'
 
 export default function SettingsView({
@@ -43,6 +44,12 @@ export default function SettingsView({
   floatingSupported,
   expressiveVoice,
   setExpressiveVoice,
+  voicePersona,
+  setVoicePersona,
+  speechPitch,
+  setSpeechPitch,
+  speechVolume,
+  setSpeechVolume,
 }) {
   const [permissions, setPermissions] = useState(null)
   useEffect(() => {
@@ -304,6 +311,18 @@ export default function SettingsView({
           Otherwise, APPLE listens between replies and offers an Interrupt button.
         </p>
       </div>
+      <VoiceSpeechSettings
+        voicePersona={voicePersona}
+        setVoicePersona={setVoicePersona}
+        speechRate={speechRate}
+        setSpeechRate={setSpeechRate}
+        speechPitch={speechPitch}
+        setSpeechPitch={setSpeechPitch}
+        speechVolume={speechVolume}
+        setSpeechVolume={setSpeechVolume}
+        speak={speak}
+        muted={preferences.muted}
+      />
       <div className="settings-card">
         <div className="settings-card-heading">
           <span className="suggestion-icon amber">
@@ -435,6 +454,9 @@ export default function SettingsView({
                 model: model.trim(),
                 voice,
                 speech_rate: speechRate,
+                speech_pitch: speechPitch,
+                speech_volume: speechVolume,
+                voice_persona: voicePersona,
                 expressive_voice: expressiveVoice,
                 automation_enabled: automation,
                 setup_completed: true,

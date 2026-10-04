@@ -18,7 +18,7 @@ from ai_parser import parse_command, model_status, ModelUnavailable
 from executor import execute_action, REVIEW_ACTIONS, close_browser
 from storage import put, get, list_records, delete, settings, delete_history
 from knowledge import ingest, answer, make_quiz, public_quiz, grade_answer, cancel_study_tasks, quiz_cache_id, MAX_BYTES
-from speech import spoken_text, spoken_result, render_audio, cancel_synthesis
+from speech import spoken_text, spoken_result, render_audio, cancel_synthesis, list_voices
 from memory import save_fact
 from desktop_automation import permissions_status
 from executor import process
@@ -393,6 +393,10 @@ SPEECH = None
 class Speech(BaseModel):
     text: str = Field(min_length=1, max_length=12000)
     wait: bool = False
+    persona: str | None = Field(default=None, pattern=r'^(hero|jarvis|natural)$')
+    speech_rate: int | None = Field(default=None, ge=100, le=250)
+    speech_pitch: float | None = Field(default=None, ge=0.5, le=2.0)
+    speech_volume: float | None = Field(default=None, ge=0.0, le=1.0)
 
 
 async def stop_speech():
@@ -404,13 +408,32 @@ async def stop_speech():
     await cancel_synthesis()
 
 
+@app.get('/api/voices')
+async def voices():
+    return list_voices()
+
+
 @app.post('/api/speech/audio')
 async def speech_audio(value: Speech):
     if platform.system() != 'Darwin':
         raise ValueError('Local speech requires macOS.')
-    data = await render_audio(value.text, settings().speech_rate)
+    cfg = settings()
+    persona = value.persona or cfg.voice_persona
+    rate = value.speech_rate or cfg.speech_rate
+    pitch = value.speech_pitch if value.speech_pitch is not None else cfg.speech_pitch
+    volume = value.speech_volume if value.speech_volume is not None else cfg.speech_volume
+    result = await render_audio(
+        value.text, rate,
+        persona=persona,
+        pitch=pitch,
+        volume=volume,
+    )
+    if isinstance(result, (tuple, list)):
+        data, clean = result
+    else:
+        data, clean = result, spoken_text(value.text)
     return Response(content=data, media_type='audio/wav', status_code=200 if data else 204,
-                    headers={'Cache-Control': 'no-store', 'X-Apple-Spoken-Text': quote(spoken_text(value.text), safe='')})
+                    headers={'Cache-Control': 'no-store', 'X-Apple-Spoken-Text': quote(clean or spoken_text(value.text), safe='')})
 
 
 @app.post('/api/speech')
@@ -422,7 +445,12 @@ async def speak(value: Speech):
     clean = spoken_text(value.text)
     if not clean:
         return {'speaking': False, 'completed': True}
-    SPEECH = await asyncio.create_subprocess_exec('say', '-r', str(settings().speech_rate), '--', clean)
+    cfg = settings()
+    persona = value.persona or cfg.voice_persona
+    rate = value.speech_rate or cfg.speech_rate
+    from speech import get_voice_for_persona
+    voice_name = get_voice_for_persona(persona, clean)
+    SPEECH = await asyncio.create_subprocess_exec('say', '-v', voice_name, '-r', str(rate), '--', clean)
     if value.wait:
         process = SPEECH
         code = await process.wait()

@@ -66,16 +66,22 @@ export function useAudioEngine() {
   }, [])
 
   const play = useCallback(
-    async (text, onPlayback) => {
+    async (text, onPlayback, options = {}) => {
       const epoch = generation.current
       const ctx = await prepare()
       if (epoch !== generation.current) return
       const job = { controller: new AbortController() }
       active.current = job
       try {
+        const payload = { text: text.slice(0, 12000) }
+        if (options?.persona) payload.persona = options.persona
+        if (options?.speechRate) payload.speech_rate = options.speechRate
+        if (options?.speechPitch != null) payload.speech_pitch = options.speechPitch
+        if (options?.speechVolume != null) payload.speech_volume = options.speechVolume
+
         const response = await api('/speech/audio', {
           method: 'POST',
-          body: JSON.stringify({ text: text.slice(0, 12000) }),
+          body: JSON.stringify(payload),
           stream: true,
           signal: job.controller.signal,
         })

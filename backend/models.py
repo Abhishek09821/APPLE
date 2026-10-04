@@ -35,6 +35,9 @@ class Settings(BaseModel):
     model: str = Field(default='qwen3:8b', min_length=1, max_length=100)
     voice: bool = True
     speech_rate: int = Field(default=175, ge=100, le=250)
+    speech_pitch: float = Field(default=1.0, ge=0.5, le=2.0)
+    speech_volume: float = Field(default=1.0, ge=0.0, le=1.0)
+    voice_persona: str = Field(default='natural', pattern=r'^(hero|jarvis|natural)$')
     expressive_voice: bool = True
     automation_enabled: bool = False
     setup_completed: bool = False

@@ -1,4 +1,8 @@
-"""Short, readable speech and local PCM audio for synchronized browser playback."""
+"""Short, readable speech and local PCM audio for synchronized browser playback.
+
+Voice engine with modular personas, automatic Hindi/English language detection,
+and native macOS voice support for natural Hindi pronunciation.
+"""
 import asyncio
 from collections import OrderedDict
 from pathlib import Path
@@ -12,6 +16,120 @@ URL = re.compile(
     r'(?![\w-])(?:/\S*)?', re.I)
 CACHE = OrderedDict()
 SYNTHESIS = set()
+
+# ---------------------------------------------------------------------------
+# Modular voice registry – add new voices by appending to this dict.
+# Each persona maps a language tag to a native macOS voice.
+# The engine auto-detects Hindi vs English in the text and picks the right
+# voice from the persona's mapping.
+# ---------------------------------------------------------------------------
+
+VOICE_REGISTRY = {
+    'hero': {
+        'label': 'Hero',
+        'description': 'Young, energetic, witty Hindi/English superhero-style voice',
+        'voices': {
+            'hi': 'Lekha',     # Native Hindi – hi_IN
+            'en': 'Rishi',     # Indian English – en_IN (energetic male)
+        },
+        'base_pitch': {
+            'hi': 195,
+            'en': 145,
+        },
+    },
+    'jarvis': {
+        'label': 'Jarvis',
+        'description': 'Deep, calm, intelligent English/Hinglish voice',
+        'voices': {
+            'hi': 'Lekha',     # Native Hindi – hi_IN
+            'en': 'Aman',      # Indian English – en_IN (deeper calm male)
+        },
+        'base_pitch': {
+            'hi': 165,
+            'en': 105,
+        },
+    },
+    'natural': {
+        'label': 'Natural',
+        'description': 'Friendly, natural Indian Hindi/English voice',
+        'voices': {
+            'hi': 'Lekha',     # Native Hindi – hi_IN
+            'en': 'Tara',      # Indian English – en_IN (natural female)
+        },
+        'base_pitch': {
+            'hi': 180,
+            'en': 180,
+        },
+    },
+}
+
+# ---------------------------------------------------------------------------
+# Hindi / Devanagari & Hinglish detection
+# ---------------------------------------------------------------------------
+
+# Devanagari Unicode range (U+0900–U+097F) plus extended (U+A8E0–U+A8FF)
+_DEVANAGARI = re.compile(r'[\u0900-\u097F\uA8E0-\uA8FF]')
+
+# Common Hindi words written in Latin script (Hinglish)
+_HINDI_LATIN = re.compile(
+    r'\b(?:kya|kyu|kyun|kaise|kahan|kab|kaun|kitna|kitne|kitni|'
+    r'nahi|nahin|haan|ha|na|accha|theek|sahi|galat|bahut|zyada|thoda|'
+    r'aur|hai|hain|ho|hoon|tha|thi|the|hoga|hogi|honge|'
+    r'mein|hum|humara|humari|humare|tum|tumhara|tumhari|tumhare|'
+    r'aap|aapka|aapki|aapke|main|mera|meri|mere|yeh|ye|woh|wo|'
+    r'iska|uski|iske|uske|jiska|jiski|jiske|'
+    r'kar|karo|karna|karunga|karenge|kiya|diya|liya|le|lo|de|do|'
+    r'bolo|boliye|dekho|dekh|chalo|chal|suno|batao|'
+    r'abhi|bhai|yaar|dost|sirf|sab|sabse|kuch|'
+    r'namaste|namaskar|dhanyavaad|dhanyawad|shukriya|'
+    r'arre|are|mat|matlab|samajh|samjha|pakka|bilkul|'
+    r'lekin|magar|par|phir|waise|isliye|zaroor)\b', re.I)
+
+
+def detect_language(text):
+    """Detect whether text is primarily Hindi or English.
+
+    Returns 'hi' for Hindi/Devanagari-heavy text or Hinglish, 'en' otherwise.
+    Supports Hindi, English, and Hinglish code-switching in the same sentence.
+    """
+    if not text:
+        return 'en'
+
+    # If any Devanagari characters are present, route to Hindi voice (Lekha)
+    # to guarantee native Hindi phonemes, correct retroflexes and natural tone
+    if _DEVANAGARI.search(text):
+        return 'hi'
+
+    # Check for Romanised Hindi (Hinglish)
+    hindi_words = len(_HINDI_LATIN.findall(text))
+    all_words = len(text.split())
+    if all_words > 0 and (hindi_words / all_words >= 0.2 or hindi_words >= 2):
+        return 'hi'
+
+    return 'en'
+
+
+def get_voice_for_persona(persona, text):
+    """Pick the macOS voice name for a persona given the text content.
+
+    Falls back to 'natural' persona if persona is unknown.
+    """
+    entry = VOICE_REGISTRY.get(persona, VOICE_REGISTRY['natural'])
+    lang = detect_language(text)
+    return entry['voices'].get(lang, entry['voices']['en'])
+
+
+def _compute_pitch_hz(persona, lang, pitch_multiplier):
+    """Compute the macOS `say` base pitch in Hz.
+
+    `pitch_multiplier` is the user's 0.5–2.0 slider value.
+    Scales the persona- and language-specific base frequency.
+    """
+    entry = VOICE_REGISTRY.get(persona, VOICE_REGISTRY['natural'])
+    base_dict = entry.get('base_pitch', {'hi': 180, 'en': 140})
+    base = base_dict.get(lang, 150)
+    hz = int(base * pitch_multiplier)
+    return max(50, min(320, hz))
 
 
 def spoken_text(text, limit=440):
@@ -57,21 +175,45 @@ def spoken_result(reply, results):
     return spoken_text(reply)
 
 
-async def render_audio(text, rate):
+async def render_audio(text, rate, persona='natural', pitch=1.0, volume=1.0):
+    """Render text to WAV audio using macOS `say` with the selected persona.
+
+    Args:
+        text: The text to speak.
+        rate: Words per minute (100–250).
+        persona: Voice persona key ('hero', 'jarvis', 'natural').
+        pitch: Pitch multiplier (0.5–2.0).
+        volume: Output volume (0.0–1.0, scaled in 16-bit PCM).
+    """
     clean = spoken_text(text)
     if not clean:
-        return b''
-    key = (clean, rate)
+        return b'', clean
+    entry = VOICE_REGISTRY.get(persona, VOICE_REGISTRY['natural'])
+    lang = detect_language(clean)
+    voice_name = entry['voices'].get(lang, entry['voices']['en'])
+    pitch_hz = _compute_pitch_hz(persona, lang, pitch)
+    key = (clean, rate, persona, pitch_hz, voice_name, round(volume, 2))
     if key in CACHE:
         CACHE.move_to_end(key)
-        return CACHE[key]
+        return CACHE[key], clean
     with tempfile.TemporaryDirectory(prefix='apple-speech-') as directory:
         source = Path(directory) / 'speech.txt'
         target = Path(directory) / 'speech.wav'
-        source.write_text(clean)
+        # Prepend macOS speech synthesis pitch tag
+        text_with_pitch = f'[[pbas {pitch_hz}]] {clean}' if pitch_hz else clean
+        source.write_text(text_with_pitch)
+
+        cmd = [
+            'say',
+            '-v', voice_name,
+            '-r', str(rate),
+            '-f', str(source),
+            '-o', str(target),
+            '--file-format=WAVE',
+            '--data-format=LEI16@22050',
+        ]
         process = await asyncio.create_subprocess_exec(
-            'say', '-r', str(rate), '-f', str(source), '-o', str(target),
-            '--file-format=WAVE', '--data-format=LEI16@22050',
+            *cmd,
             stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE)
         SYNTHESIS.add(process)
         try:
@@ -84,10 +226,24 @@ async def render_audio(text, rate):
             if process.returncode is None:
                 process.kill()
                 await process.wait()
+
+    # Apply volume scaling inline if volume < 0.99 (PCM 16-bit LE samples)
+    if volume < 0.99 and len(data) > 44:
+        import struct
+        header = data[:44]
+        samples = data[44:]
+        scaled = bytearray(len(samples))
+        for i in range(0, len(samples) - 1, 2):
+            sample = struct.unpack_from('<h', samples, i)[0]
+            sample = int(sample * volume)
+            sample = max(-32768, min(32767, sample))
+            struct.pack_into('<h', scaled, i, sample)
+        data = header + bytes(scaled)
+
     CACHE[key] = data
     while len(CACHE) > 20:
         CACHE.popitem(last=False)
-    return data
+    return data, clean
 
 
 async def cancel_synthesis():
@@ -98,3 +254,16 @@ async def cancel_synthesis():
             except ProcessLookupError:
                 pass
         await process.wait()
+
+
+def list_voices():
+    """Return available voice personas for the frontend settings UI."""
+    return [
+        {
+            'id': key,
+            'label': entry['label'],
+            'description': entry['description'],
+            'voices': entry['voices'],
+        }
+        for key, entry in VOICE_REGISTRY.items()
+    ]

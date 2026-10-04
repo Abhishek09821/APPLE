@@ -136,6 +136,15 @@ export default function App() {
   const [librarySearch, setLibrarySearch] = useState('')
   const [filePath, setFilePath] = useState('')
   const [speechRate, setSpeechRate] = useState(175)
+  const [speechPitch, setSpeechPitch] = useState(
+    () => (localStorage.getItem('apple-speech-pitch') !== null ? Number(localStorage.getItem('apple-speech-pitch')) : 1.0),
+  )
+  const [speechVolume, setSpeechVolume] = useState(
+    () => (localStorage.getItem('apple-speech-volume') !== null ? Number(localStorage.getItem('apple-speech-volume')) : 1.0),
+  )
+  const [voicePersona, setVoicePersona] = useState(
+    () => localStorage.getItem('apple-voice-persona') || 'natural',
+  )
   const [expressiveVoice, setExpressiveVoice] = useState(true)
   const controller = useRef(null)
   const speechQueue = useRef(Promise.resolve())
@@ -299,6 +308,9 @@ export default function App() {
       if (s && live) {
         setModel(s.settings.model)
         setSpeechRate(s.settings.speech_rate)
+        setSpeechPitch(s.settings.speech_pitch ?? 1.0)
+        setSpeechVolume(s.settings.speech_volume ?? 1.0)
+        setVoicePersona(s.settings.voice_persona || 'natural')
         setExpressiveVoice(s.settings.expressive_voice !== false)
         setAutomation(s.settings.automation_enabled)
         setAutoTutor(s.settings.auto_tutor !== false)
@@ -338,7 +350,7 @@ export default function App() {
   function patchMessage(id, values) {
     setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, ...values } : m)))
   }
-  function speak(text) {
+  function speak(text, options) {
     if (audioMuted.current || !text?.trim()) return Promise.resolve()
     const epoch = speechEpoch.current
     audio.prepare().catch((e) => setError(e.message))
@@ -349,15 +361,19 @@ export default function App() {
         if (audioMuted.current || epoch !== speechEpoch.current) return
         let ended, playback
         try {
-          await audio.play(text, (reference) => {
-            ended = echoGuard.current.begin(reference)
-            playback = ++playbackSequence.current
-            // Pause synchronously before the first audio sample, not after a
-            // React render. Unsupported browsers use safe turn-taking.
-            if (!audio.canInterrupt) voiceSession.pause()
-            clearTimeout(speechTailTimer.current)
-            setSpeechTail(true)
-          })
+          await audio.play(
+            text,
+            (reference) => {
+              ended = echoGuard.current.begin(reference)
+              playback = ++playbackSequence.current
+              // Pause synchronously before the first audio sample, not after a
+              // React render. Unsupported browsers use safe turn-taking.
+              if (!audio.canInterrupt) voiceSession.pause()
+              clearTimeout(speechTailTimer.current)
+              setSpeechTail(true)
+            },
+            options,
+          )
         } finally {
           ended?.()
           if (playback === playbackSequence.current) {
@@ -1026,6 +1042,21 @@ export default function App() {
                   floatingSupported={floating.supported}
                   expressiveVoice={expressiveVoice}
                   setExpressiveVoice={setExpressiveVoice}
+                  voicePersona={voicePersona}
+                  setVoicePersona={(v) => {
+                    setVoicePersona(v)
+                    localStorage.setItem('apple-voice-persona', v)
+                  }}
+                  speechPitch={speechPitch}
+                  setSpeechPitch={(p) => {
+                    setSpeechPitch(p)
+                    localStorage.setItem('apple-speech-pitch', p)
+                  }}
+                  speechVolume={speechVolume}
+                  setSpeechVolume={(v) => {
+                    setSpeechVolume(v)
+                    localStorage.setItem('apple-speech-volume', v)
+                  }}
                   status={status}
                   memories={memories}
                   automation={automation}
